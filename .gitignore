@@ -20,6 +20,37 @@ parts/
 sdist/
 var/
 wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Data cache and temporary files
+data/cache/
+*.tmp
+*.temp
+
+# Environment variables
+.env
+.env.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Streamlit
+.streamlit/secrets.toml
+var/
+wheels/
 pip-wheel-metadata/
 share/python-wheels/
 *.egg-info/

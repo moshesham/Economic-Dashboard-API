@@ -9,12 +9,13 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 from modules.data_loader import (
-    load_fred_data, 
-    load_yfinance_data, 
+    load_fred_data,
+    load_yfinance_data,
     get_latest_value,
     calculate_percentage_change,
     load_world_bank_gdp
 )
+from config import is_offline_mode, can_use_offline_data
 
 # Page configuration
 st.set_page_config(
@@ -206,6 +207,22 @@ with st.sidebar:
     - Yahoo Finance
     - World Bank
     """)
-    
+
+    # Offline mode indicator
     st.divider()
+    if is_offline_mode():
+        st.info("🔌 **Offline Mode**: Using cached/sample data")
+    else:
+        st.success("🌐 **Online Mode**: Using live data")
+
+    # Show data availability
+    with st.expander("📊 Data Status"):
+        fred_status = "✅ Available" if can_use_offline_data('fred') else "❌ Not available"
+        yf_status = "✅ Available" if can_use_offline_data('yfinance') else "❌ Not available"
+        wb_status = "✅ Available" if can_use_offline_data('world_bank') else "❌ Not available"
+
+        st.markdown(f"**FRED Data:** {fred_status}")
+        st.markdown(f"**Yahoo Finance:** {yf_status}")
+        st.markdown(f"**World Bank:** {wb_status}")
+
     st.caption("Built with Streamlit, Plotly, and Python")

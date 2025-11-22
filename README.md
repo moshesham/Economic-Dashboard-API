@@ -81,6 +81,15 @@ streamlit run app.py
 
 The dashboard will open automatically in your default web browser at `http://localhost:8501`
 
+### Step 5: Run Tests (Optional)
+```bash
+# Run the local testing framework
+python test_locally.py
+
+# Or run tests manually
+python -m pytest tests/ -v
+```
+
 ## 📦 Project Structure
 
 ```
@@ -105,22 +114,105 @@ economic-dashboard/
 └── README.md               # Project documentation
 ```
 
-## 📚 Dependencies
+## 🧪 Testing
 
-- **streamlit** (≥1.28.0): Web application framework
-- **pandas** (≥2.0.0): Data manipulation and analysis
-- **plotly** (≥5.17.0): Interactive data visualizations
-- **yfinance** (≥0.2.28): Yahoo Finance API for market data
-- **pandas-datareader** (≥0.10.0): FRED and World Bank data access
-- **numpy** (≥1.24.0): Numerical computing
+This project includes a comprehensive testing framework to ensure reliability and facilitate future deployments.
 
-## 🔗 Data Sources
+### Local Testing
+Run the local testing script to validate the entire application:
 
-This dashboard pulls data from the following authoritative sources:
+```bash
+python test_locally.py
+```
 
-- **[Federal Reserve Economic Data (FRED)](https://fred.stlouisfed.org/)**: US economic indicators, treasury yields, commodity prices
-- **[Yahoo Finance](https://finance.yahoo.com/)**: Stock market indices, volatility data (VIX)
-- **[World Bank](https://www.worldbank.org/)**: Global GDP growth statistics
+This script performs:
+- ✅ Syntax checking for all Python files
+- ✅ Unit tests for data loading functions
+- ✅ Integration tests for app modules
+- ✅ Offline mode validation
+
+### Manual Testing
+Run individual test components:
+
+```bash
+# Run all tests
+python -m pytest tests/ -v
+
+# Run specific test file
+python -m pytest tests/test_data_loader.py -v
+
+# Run with coverage (if pytest-cov installed)
+python -m pytest tests/ --cov=modules --cov=pages
+```
+
+### Offline Mode
+The application supports offline mode for development and testing:
+
+```bash
+# Enable offline mode
+export ECONOMIC_DASHBOARD_OFFLINE=true
+streamlit run app.py
+
+# Or on Windows
+set ECONOMIC_DASHBOARD_OFFLINE=true
+streamlit run app.py
+```
+
+In offline mode, the app uses pre-generated sample data instead of calling external APIs.
+
+### CI/CD
+The project includes GitHub Actions workflow (`.github/workflows/ci-cd.yml`) that:
+- Runs tests on every push and pull request
+- Checks code syntax
+- Validates dependencies
+- Ensures deployment readiness
+
+## � Offline Mode & Caching
+
+The dashboard includes robust offline mode and caching capabilities for reliable operation.
+
+### Offline Mode
+When internet connectivity is limited or for development/testing, enable offline mode:
+
+```bash
+# Linux/macOS
+export ECONOMIC_DASHBOARD_OFFLINE=true
+streamlit run app.py
+
+# Windows PowerShell
+$env:ECONOMIC_DASHBOARD_OFFLINE="true"
+streamlit run app.py
+
+# Windows Command Prompt
+set ECONOMIC_DASHBOARD_OFFLINE=true
+streamlit run app.py
+```
+
+### Sample Data Generation
+Generate sample datasets for offline testing:
+
+```bash
+python generate_sample_data.py
+```
+
+This creates:
+- `data/sample_fred_data.csv`: Economic indicators (GDP, inflation, etc.)
+- `data/sample_*_data.csv`: Stock market data for major indices
+- `data/sample_world_bank_gdp.csv`: Global GDP growth data
+
+### Data Caching
+The application automatically caches API responses to reduce load times and API calls:
+
+- **Cache Location**: `data/cache/`
+- **Cache Duration**: 24 hours (configurable in `config.py`)
+- **Cache Types**: FRED data, Yahoo Finance data, World Bank data, calculated values
+
+### Features in Offline Mode
+- ✅ All dashboard functionality works
+- ✅ Realistic sample data with proper time series
+- ✅ Data visualization and analysis tools
+- ✅ Sidebar shows offline mode status
+- ⚠️ Data is simulated, not real-time
 
 ## 🎨 Configuration
 
