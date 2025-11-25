@@ -14,7 +14,7 @@ from modules.data_loader import (
     calculate_percentage_change,
     calculate_yoy_change
 )
-from config import is_offline_mode, can_use_offline_data
+from config_settings import is_offline_mode, can_use_offline_data
 from modules.auth.credentials_manager import get_credentials_manager
 
 # Page configuration

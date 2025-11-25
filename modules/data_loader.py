@@ -10,7 +10,7 @@ from pandas_datareader import data as pdr
 from datetime import datetime, timedelta
 import os
 import pickle
-from config import (
+from config_settings import (
     is_offline_mode, can_use_offline_data, get_cache_dir,
     ensure_cache_dir, CACHE_EXPIRY_HOURS
 )
@@ -114,7 +114,20 @@ def load_fred_data(series_ids: dict) -> pd.DataFrame:
     if is_offline_mode():
         return _load_offline_fred_data(series_ids)
 
-    # Try to load from cache
+    # First, try to load from the centralized cache (updated daily by automation)
+    centralized_cache = f"{get_cache_dir()}/fred_all_series.pkl"
+    if os.path.exists(centralized_cache):
+        try:
+            cached_data = _load_cached_data(centralized_cache)
+            if cached_data is not None and isinstance(cached_data, pd.DataFrame):
+                # Filter to requested series
+                available_series = [name for name in series_ids.keys() if name in cached_data.columns]
+                if available_series:
+                    return cached_data[available_series].copy()
+        except Exception as e:
+            st.warning(f"Could not load from centralized cache: {e}")
+
+    # Fallback: Try to load from individual cache
     cache_key = str(sorted(series_ids.items()))
     cache_file = f"{get_cache_dir()}/fred_{hash(cache_key)}.pkl"
     cached_data = _load_cached_data(cache_file)
@@ -175,7 +188,20 @@ def load_yfinance_data(tickers: dict, period: str = "5y") -> dict:
     if is_offline_mode():
         return _load_offline_yfinance_data(tickers, period)
 
-    # Try to load from cache
+    # First, try to load from the centralized cache (updated daily by automation)
+    centralized_cache = f"{get_cache_dir()}/yfinance_all_tickers.pkl"
+    if os.path.exists(centralized_cache):
+        try:
+            cached_data = _load_cached_data(centralized_cache)
+            if cached_data is not None and isinstance(cached_data, dict):
+                # Filter to requested tickers
+                available_tickers = {name: data for name, data in cached_data.items() if name in tickers.keys()}
+                if available_tickers:
+                    return available_tickers
+        except Exception as e:
+            st.warning(f"Could not load from centralized cache: {e}")
+
+    # Fallback: Try to load from individual cache
     cache_key = str(sorted(tickers.items())) + period
     cache_file = f"{get_cache_dir()}/yfinance_{hash(cache_key)}.pkl"
     cached_data = _load_cached_data(cache_file)

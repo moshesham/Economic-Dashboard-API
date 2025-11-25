@@ -49,6 +49,15 @@ This dashboard serves as a high-performance analytical tool for tracking real-ti
 - **Status Indicators**: Real-time display of configured services
 - **Higher Limits**: Automatic use of API keys for better rate limits and reliability
 
+### 🔄 Automated Data Refresh (NEW)
+- **Daily Updates**: Automatic data refresh at 6 AM UTC via GitHub Actions or Apache Airflow
+- **Centralized Caching**: All economic data stored in unified cache for fast access
+- **Backup System**: CSV backups created daily for inspection and recovery
+- **Manual Triggers**: Run data refresh on-demand when needed
+- **Quality Validation**: Automated checks ensure data freshness and completeness
+
+For detailed setup instructions, see [docs/AUTOMATED_DATA_REFRESH.md](docs/AUTOMATED_DATA_REFRESH.md)
+
 ## 🚀 Live Demo
 
 *Coming soon: Streamlit Cloud deployment link*
