@@ -12,6 +12,11 @@ OFFLINE_MODE = os.getenv('ECONOMIC_DASHBOARD_OFFLINE', 'false').lower() == 'true
 CACHE_DIR = 'data/cache'
 CACHE_EXPIRY_HOURS = 24  # How long to keep cached data
 
+# Yahoo Finance rate limiting
+YFINANCE_RATE_LIMIT_DELAY = 0.5  # Seconds between requests
+YFINANCE_BATCH_SIZE = 5  # Max tickers to fetch in one batch
+YFINANCE_CACHE_HOURS = 24  # Cache Yahoo Finance data for 24 hours
+
 # Data sources
 DATA_SOURCES = {
     'fred': {
