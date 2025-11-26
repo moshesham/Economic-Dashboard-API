@@ -29,3 +29,6 @@ pandera>=0.20.0
 
 # Progress Tracking
 tqdm>=4.66.0
+# Sentiment Analysis & News
+textblob>=0.18.0
+requests>=2.31.0
