@@ -4,6 +4,7 @@ Unit tests for data_loader module.
 
 import pytest
 import pandas as pd
+import streamlit as st
 from unittest.mock import patch, MagicMock
 from modules.data_loader import (
     load_fred_data,
@@ -14,11 +15,20 @@ from modules.data_loader import (
 )
 
 
+@pytest.fixture(autouse=True)
+def clear_streamlit_cache():
+    """Clear Streamlit cache before each test to ensure test isolation."""
+    st.cache_data.clear()
+    yield
+    st.cache_data.clear()
+
+
 class TestDataLoader:
     """Test cases for data loading functions."""
 
+    @patch('modules.data_loader._load_cached_data', return_value=None)
     @patch('modules.data_loader.pdr.DataReader')
-    def test_load_fred_data_success(self, mock_datareader):
+    def test_load_fred_data_success(self, mock_datareader, mock_cache):
         """Test successful FRED data loading."""
         # Mock data
         mock_df = pd.DataFrame({
@@ -34,8 +44,9 @@ class TestDataLoader:
         assert 'GDP Growth' in result.columns
         mock_datareader.assert_called()
 
+    @patch('modules.data_loader._load_cached_data', return_value=None)
     @patch('modules.data_loader.pdr.DataReader')
-    def test_load_fred_data_failure(self, mock_datareader):
+    def test_load_fred_data_failure(self, mock_datareader, mock_cache):
         """Test FRED data loading failure."""
         mock_datareader.side_effect = Exception("API Error")
 
@@ -44,8 +55,9 @@ class TestDataLoader:
 
         assert result.empty
 
+    @patch('modules.data_loader._load_cached_data', return_value=None)
     @patch('modules.data_loader.yf.download')
-    def test_load_yfinance_data_success(self, mock_download):
+    def test_load_yfinance_data_success(self, mock_download, mock_cache):
         """Test successful Yahoo Finance data loading."""
         mock_df = pd.DataFrame({
             'Close': [100.0, 101.0, 102.0]
@@ -60,8 +72,9 @@ class TestDataLoader:
         assert not result['S&P 500'].empty
         mock_download.assert_called_once_with('^GSPC', period='1y', progress=False)
 
+    @patch('modules.data_loader._load_cached_data', return_value=None)
     @patch('modules.data_loader.yf.download')
-    def test_load_yfinance_data_failure(self, mock_download):
+    def test_load_yfinance_data_failure(self, mock_download, mock_cache):
         """Test Yahoo Finance data loading failure."""
         mock_download.side_effect = Exception("Download Error")
 
@@ -70,8 +83,9 @@ class TestDataLoader:
 
         assert result == {}
 
+    @patch('modules.data_loader._load_cached_data', return_value=None)
     @patch('modules.data_loader.pdr.DataReader')
-    def test_get_latest_value_success(self, mock_datareader):
+    def test_get_latest_value_success(self, mock_datareader, mock_cache):
         """Test getting latest value successfully."""
         mock_df = pd.DataFrame({
             'CPIAUCSL': [100.0, 101.0, 102.0]
@@ -83,8 +97,9 @@ class TestDataLoader:
 
         assert result == 102.0
 
+    @patch('modules.data_loader._load_cached_data', return_value=None)
     @patch('modules.data_loader.pdr.DataReader')
-    def test_get_latest_value_no_data(self, mock_datareader):
+    def test_get_latest_value_no_data(self, mock_datareader, mock_cache):
         """Test getting latest value with no data."""
         mock_df = pd.DataFrame()
 
@@ -94,8 +109,9 @@ class TestDataLoader:
 
         assert result is None
 
+    @patch('modules.data_loader._load_cached_data', return_value=None)
     @patch('modules.data_loader.pdr.DataReader')
-    def test_calculate_percentage_change_success(self, mock_datareader):
+    def test_calculate_percentage_change_success(self, mock_datareader, mock_cache):
         """Test percentage change calculation."""
         mock_df = pd.DataFrame({
             'A191RL1Q225SBEA': [100.0, 105.0, 110.0, 108.0, 112.0]
