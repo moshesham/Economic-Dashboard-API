@@ -494,6 +494,105 @@ def create_sec_13f_holdings_table():
     db.execute("CREATE INDEX IF NOT EXISTS idx_sec_13f_cik ON sec_13f_holdings(cik)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_sec_13f_filing_date ON sec_13f_holdings(filing_date)")
     db.execute("CREATE INDEX IF NOT EXISTS idx_sec_13f_cusip ON sec_13f_holdings(cusip)")
+
+
+def create_leverage_metrics_table():
+    """Create table for leverage and margin metrics"""
+    db = get_db_connection()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS leverage_metrics (
+            ticker VARCHAR NOT NULL,
+            date DATE NOT NULL,
+            short_interest BIGINT,
+            short_interest_ratio DOUBLE,
+            days_to_cover DOUBLE,
+            short_percent_float DOUBLE,
+            shares_outstanding BIGINT,
+            float_shares BIGINT,
+            avg_volume_10d BIGINT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (ticker, date)
+        )
+    """)
+    
+    db.execute("CREATE INDEX IF NOT EXISTS idx_leverage_ticker ON leverage_metrics(ticker)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_leverage_date ON leverage_metrics(date)")
+
+
+def create_vix_term_structure_table():
+    """Create table for VIX and volatility term structure"""
+    db = get_db_connection()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS vix_term_structure (
+            date DATE NOT NULL,
+            vix DOUBLE,
+            vix_3m DOUBLE,
+            vix_6m DOUBLE,
+            vvix DOUBLE,
+            vix_term_spread DOUBLE,
+            vix_regime VARCHAR,
+            backwardation_ratio DOUBLE,
+            stress_score DOUBLE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (date)
+        )
+    """)
+    
+    db.execute("CREATE INDEX IF NOT EXISTS idx_vix_date ON vix_term_structure(date)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_vix_regime ON vix_term_structure(vix_regime)")
+
+
+def create_leveraged_etf_data_table():
+    """Create table for leveraged ETF tracking"""
+    db = get_db_connection()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS leveraged_etf_data (
+            ticker VARCHAR NOT NULL,
+            date DATE NOT NULL,
+            close DOUBLE,
+            volume BIGINT,
+            volume_ratio DOUBLE,
+            intraday_volatility DOUBLE,
+            tracking_error DOUBLE,
+            premium_discount DOUBLE,
+            stress_indicator DOUBLE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (ticker, date)
+        )
+    """)
+    
+    db.execute("CREATE INDEX IF NOT EXISTS idx_lev_etf_ticker ON leveraged_etf_data(ticker)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_lev_etf_date ON leveraged_etf_data(date)")
+
+
+def create_margin_call_risk_table():
+    """Create table for composite margin call risk scores"""
+    db = get_db_connection()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS margin_call_risk (
+            ticker VARCHAR NOT NULL,
+            date DATE NOT NULL,
+            leverage_score DOUBLE,
+            volatility_score DOUBLE,
+            options_score DOUBLE,
+            liquidity_score DOUBLE,
+            composite_risk_score DOUBLE,
+            risk_level VARCHAR,
+            vix_regime VARCHAR,
+            short_interest_pct DOUBLE,
+            put_call_ratio DOUBLE,
+            iv_rank DOUBLE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (ticker, date)
+        )
+    """)
+    
+    db.execute("CREATE INDEX IF NOT EXISTS idx_margin_risk_ticker ON margin_call_risk(ticker)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_margin_risk_date ON margin_call_risk(date)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_margin_risk_level ON margin_call_risk(risk_level)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_margin_composite ON margin_call_risk(composite_risk_score)")
+
+
 def create_news_sentiment_table():
     """Create table for news article sentiment data"""
     db = get_db_connection()
@@ -599,6 +698,19 @@ def create_all_tables():
     create_feature_drift_table()
     print("✓ Created feature_drift table")
     
+    # Margin Call Risk Tables
+    create_leverage_metrics_table()
+    print("✓ Created leverage_metrics table")
+    
+    create_vix_term_structure_table()
+    print("✓ Created vix_term_structure table")
+    
+    create_leveraged_etf_data_table()
+    print("✓ Created leveraged_etf_data table")
+    
+    create_margin_call_risk_table()
+    print("✓ Created margin_call_risk table")
+    
     # SEC Data Tables
     create_sec_submissions_table()
     print("✓ Created sec_submissions table")
@@ -636,6 +748,10 @@ def drop_all_tables():
         'google_trends',
         'sentiment_summary',
         'news_sentiment',
+        'margin_call_risk',
+        'leveraged_etf_data',
+        'vix_term_structure',
+        'leverage_metrics',
         'feature_drift',
         'data_refresh_log',
         'model_performance',
