@@ -80,14 +80,19 @@ with tab1:
     st.header("Market-Wide Stress Indicators")
     
     # Get latest VIX data
-    vix_query = """
-        SELECT * FROM vix_term_structure
-        ORDER BY date DESC
-        LIMIT 1
-    """
-    vix_result = db.query(vix_query)
+    vix_result = None
+    try:
+        vix_query = """
+            SELECT * FROM vix_term_structure
+            ORDER BY date DESC
+            LIMIT 1
+        """
+        vix_result = db.query(vix_query)
+    except Exception as e:
+        # Table may not exist yet
+        vix_result = pd.DataFrame()
     
-    if not vix_result.empty:
+    if vix_result is not None and not vix_result.empty:
         latest_vix = vix_result.iloc[0]
         
         # Top metrics row
@@ -141,12 +146,15 @@ with tab1:
         if show_historical:
             st.subheader("VIX Term Structure (30 Days)")
             
-            vix_history_query = f"""
-                SELECT * FROM vix_term_structure
-                WHERE date >= DATE('now', '-{days_back} days')
-                ORDER BY date
-            """
-            vix_history = db.query(vix_history_query)
+            try:
+                vix_history_query = f"""
+                    SELECT * FROM vix_term_structure
+                    WHERE date >= DATE('now', '-{days_back} days')
+                    ORDER BY date
+                """
+                vix_history = db.query(vix_history_query)
+            except Exception:
+                vix_history = pd.DataFrame()
             
             if not vix_history.empty:
                 fig = make_subplots(
@@ -210,12 +218,15 @@ with tab1:
     st.subheader("Leveraged ETF Stress Indicators")
     st.markdown("*3x leveraged ETFs often signal extreme market sentiment*")
     
-    etf_query = """
-        SELECT * FROM leveraged_etf_data
-        WHERE date = (SELECT MAX(date) FROM leveraged_etf_data)
-        ORDER BY stress_indicator DESC
-    """
-    etf_data = db.query(etf_query)
+    try:
+        etf_query = """
+            SELECT * FROM leveraged_etf_data
+            WHERE date = (SELECT MAX(date) FROM leveraged_etf_data)
+            ORDER BY stress_indicator DESC
+        """
+        etf_data = db.query(etf_query)
+    except Exception:
+        etf_data = pd.DataFrame()
     
     if not etf_data.empty:
         # Create ETF stress gauge
@@ -264,25 +275,27 @@ with tab2:
     st.header("Stock Margin Call Risk Screener")
     
     # Get all stocks with margin risk scores
-    risk_query = """
-        SELECT 
-            ticker,
-            date,
-            composite_risk_score,
-            risk_level,
-            leverage_score,
-            volatility_score,
-            options_score,
-            liquidity_score,
-            short_interest_pct,
-            put_call_ratio,
-            vix_regime
-        FROM margin_call_risk
-        WHERE date = (SELECT MAX(date) FROM margin_call_risk)
-        ORDER BY composite_risk_score DESC
-    """
-    
-    risk_data = db.query(risk_query)
+    try:
+        risk_query = """
+            SELECT 
+                ticker,
+                date,
+                composite_risk_score,
+                risk_level,
+                leverage_score,
+                volatility_score,
+                options_score,
+                liquidity_score,
+                short_interest_pct,
+                put_call_ratio,
+                vix_regime
+            FROM margin_call_risk
+            WHERE date = (SELECT MAX(date) FROM margin_call_risk)
+            ORDER BY composite_risk_score DESC
+        """
+        risk_data = db.query(risk_query)
+    except Exception:
+        risk_data = pd.DataFrame()
     
     if not risk_data.empty:
         # Filter controls
@@ -472,14 +485,16 @@ with tab3:
     )
     
     if ticker_for_history:
-        history_query = f"""
-            SELECT * FROM margin_call_risk
-            WHERE ticker = ?
-            AND date >= DATE('now', '-{days_back} days')
-            ORDER BY date
-        """
-        
-        history_data = db.query(history_query, (ticker_for_history.upper(),))
+        try:
+            history_query = f"""
+                SELECT * FROM margin_call_risk
+                WHERE ticker = ?
+                AND date >= DATE('now', '-{days_back} days')
+                ORDER BY date
+            """
+            history_data = db.query(history_query, (ticker_for_history.upper(),))
+        except Exception:
+            history_data = pd.DataFrame()
         
         if not history_data.empty:
             # Multi-line chart of all components
@@ -616,21 +631,23 @@ with tab4:
     st.subheader("Recent Alerts")
     
     # Query for stocks that crossed thresholds recently
-    recent_alerts_query = f"""
-        SELECT 
-            ticker,
-            date,
-            composite_risk_score,
-            risk_level,
-            vix_regime
-        FROM margin_call_risk
-        WHERE composite_risk_score > {critical_threshold}
-        AND date >= DATE('now', '-7 days')
-        ORDER BY date DESC, composite_risk_score DESC
-        LIMIT 10
-    """
-    
-    recent_alerts = db.query(recent_alerts_query)
+    try:
+        recent_alerts_query = f"""
+            SELECT 
+                ticker,
+                date,
+                composite_risk_score,
+                risk_level,
+                vix_regime
+            FROM margin_call_risk
+            WHERE composite_risk_score > {critical_threshold}
+            AND date >= DATE('now', '-7 days')
+            ORDER BY date DESC, composite_risk_score DESC
+            LIMIT 10
+        """
+        recent_alerts = db.query(recent_alerts_query)
+    except Exception:
+        recent_alerts = pd.DataFrame()
     
     if not recent_alerts.empty:
         for _, alert in recent_alerts.iterrows():
