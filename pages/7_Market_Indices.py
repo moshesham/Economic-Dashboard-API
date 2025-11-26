@@ -12,6 +12,38 @@ from datetime import datetime, timedelta
 from modules.data_loader import load_yfinance_data
 from config_settings import is_offline_mode
 
+
+def get_close_prices(df: pd.DataFrame, ticker: str) -> pd.Series:
+    """
+    Safely extract Close prices from DataFrame, handling both single and multi-level columns.
+    
+    Args:
+        df: DataFrame from yfinance
+        ticker: The ticker symbol
+        
+    Returns:
+        Series of close prices or None if not found
+    """
+    try:
+        if isinstance(df.columns, pd.MultiIndex):
+            # Try specific ticker column first
+            close_col = ('Close', ticker)
+            if close_col in df.columns:
+                return df[close_col]
+            # Fall back to just 'Close' level
+            if 'Close' in df.columns.get_level_values(0):
+                close_df = df['Close']
+                if isinstance(close_df, pd.DataFrame):
+                    return close_df.iloc[:, 0]
+                return close_df
+        else:
+            if 'Close' in df.columns:
+                return df['Close']
+        return None
+    except Exception:
+        return None
+
+
 # Page configuration
 st.set_page_config(
     page_title="Market Indices",
@@ -94,20 +126,11 @@ with tab_overview:
         for i, idx_name in enumerate(us_indices):
             if idx_name in index_data and not index_data[idx_name].empty:
                 df = index_data[idx_name]
-                # Handle both single and multi-level columns
-                if isinstance(df.columns, pd.MultiIndex):
-                    close_col = ('Close', MAJOR_INDICES[idx_name])
-                    if close_col in df.columns:
-                        current_price = df[close_col].iloc[-1]
-                        prev_price = df[close_col].iloc[0]
-                    else:
-                        current_price = df['Close'].iloc[-1].values[0] if 'Close' in df.columns else None
-                        prev_price = df['Close'].iloc[0].values[0] if 'Close' in df.columns else None
-                else:
-                    current_price = df['Close'].iloc[-1] if 'Close' in df.columns else None
-                    prev_price = df['Close'].iloc[0] if 'Close' in df.columns else None
+                close_prices = get_close_prices(df, MAJOR_INDICES[idx_name])
                 
-                if current_price is not None and prev_price is not None:
+                if close_prices is not None and len(close_prices) > 0:
+                    current_price = close_prices.iloc[-1]
+                    prev_price = close_prices.iloc[0]
                     pct_change = ((current_price - prev_price) / prev_price) * 100
                     
                     with cols[i]:
@@ -131,19 +154,11 @@ with tab_overview:
         for i, idx_name in enumerate(intl_indices):
             if idx_name in index_data and not index_data[idx_name].empty:
                 df = index_data[idx_name]
-                if isinstance(df.columns, pd.MultiIndex):
-                    close_col = ('Close', MAJOR_INDICES[idx_name])
-                    if close_col in df.columns:
-                        current_price = df[close_col].iloc[-1]
-                        prev_price = df[close_col].iloc[0]
-                    else:
-                        current_price = df['Close'].iloc[-1].values[0] if 'Close' in df.columns else None
-                        prev_price = df['Close'].iloc[0].values[0] if 'Close' in df.columns else None
-                else:
-                    current_price = df['Close'].iloc[-1] if 'Close' in df.columns else None
-                    prev_price = df['Close'].iloc[0] if 'Close' in df.columns else None
+                close_prices = get_close_prices(df, MAJOR_INDICES[idx_name])
                 
-                if current_price is not None and prev_price is not None:
+                if close_prices is not None and len(close_prices) > 0:
+                    current_price = close_prices.iloc[-1]
+                    prev_price = close_prices.iloc[0]
                     pct_change = ((current_price - prev_price) / prev_price) * 100
                     
                     with cols[i]:
@@ -178,16 +193,9 @@ with tab_overview:
             for idx_name in selected_indices:
                 if idx_name in index_data and not index_data[idx_name].empty:
                     df = index_data[idx_name]
-                    if isinstance(df.columns, pd.MultiIndex):
-                        close_col = ('Close', MAJOR_INDICES[idx_name])
-                        if close_col in df.columns:
-                            close_prices = df[close_col]
-                        else:
-                            close_prices = df['Close'].iloc[:, 0] if 'Close' in df.columns else None
-                    else:
-                        close_prices = df['Close'] if 'Close' in df.columns else None
+                    close_prices = get_close_prices(df, MAJOR_INDICES[idx_name])
                     
-                    if close_prices is not None:
+                    if close_prices is not None and len(close_prices) > 0:
                         # Normalize to 100
                         normalized = (close_prices / close_prices.iloc[0]) * 100
                         
@@ -247,16 +255,7 @@ with tab_performance:
         for idx_name, ticker in MAJOR_INDICES.items():
             if idx_name in perf_data and not perf_data[idx_name].empty:
                 df = perf_data[idx_name]
-                
-                # Get close prices
-                if isinstance(df.columns, pd.MultiIndex):
-                    close_col = ('Close', ticker)
-                    if close_col in df.columns:
-                        close_prices = df[close_col]
-                    else:
-                        close_prices = df['Close'].iloc[:, 0] if 'Close' in df.columns else None
-                else:
-                    close_prices = df['Close'] if 'Close' in df.columns else None
+                close_prices = get_close_prices(df, ticker)
                 
                 if close_prices is not None and len(close_prices) > 0:
                     row = {'Index': idx_name}
@@ -358,16 +357,7 @@ with tab_heatmap:
         for sector, ticker in SECTOR_ETFS.items():
             if sector in sector_data and not sector_data[sector].empty:
                 df = sector_data[sector]
-                
-                # Get close prices
-                if isinstance(df.columns, pd.MultiIndex):
-                    close_col = ('Close', ticker)
-                    if close_col in df.columns:
-                        close_prices = df[close_col]
-                    else:
-                        close_prices = df['Close'].iloc[:, 0] if 'Close' in df.columns else None
-                else:
-                    close_prices = df['Close'] if 'Close' in df.columns else None
+                close_prices = get_close_prices(df, ticker)
                 
                 if close_prices is not None and len(close_prices) > 0:
                     current_price = close_prices.iloc[-1]
@@ -479,15 +469,7 @@ with tab_correlation:
         for idx_name, ticker in MAJOR_INDICES.items():
             if idx_name in corr_data and not corr_data[idx_name].empty:
                 df = corr_data[idx_name]
-                
-                if isinstance(df.columns, pd.MultiIndex):
-                    close_col = ('Close', ticker)
-                    if close_col in df.columns:
-                        close_prices = df[close_col]
-                    else:
-                        close_prices = df['Close'].iloc[:, 0] if 'Close' in df.columns else None
-                else:
-                    close_prices = df['Close'] if 'Close' in df.columns else None
+                close_prices = get_close_prices(df, ticker)
                 
                 if close_prices is not None:
                     returns_df[idx_name] = close_prices.pct_change()

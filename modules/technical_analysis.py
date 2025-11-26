@@ -230,10 +230,8 @@ def detect_elliott_waves(data: pd.Series,
     impulse_labels = ['1', '2', '3', '4', '5']
     corrective_labels = ['A', 'B', 'C']
     
-    # Determine trend direction from first few swings
-    if len(filtered_swings) >= 2:
-        is_uptrend = filtered_swings[1]['price'] > filtered_swings[0]['price']
-    else:
+    # Need at least 2 swings to form a wave pattern
+    if len(filtered_swings) < 2:
         return []
     
     label_idx = 0

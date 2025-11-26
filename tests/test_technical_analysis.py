@@ -211,6 +211,7 @@ class TestElliottWaves:
         is_valid, violations = validate_elliott_impulse(waves)
         
         assert not is_valid
+        assert len(violations) > 0
         assert "Insufficient waves" in violations[0]
 
 

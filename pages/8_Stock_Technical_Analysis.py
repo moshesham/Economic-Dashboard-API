@@ -167,6 +167,11 @@ if stock_data and selected_stock in stock_data and not stock_data[selected_stock
         st.error("Missing required price data columns")
         st.stop()
     
+    # Pre-calculate Elliott Waves if enabled (to avoid duplicate calculation)
+    waves = None
+    if show_elliott:
+        waves = detect_elliott_waves(df['Close'], window=wave_sensitivity, min_wave_pct=min_wave_pct)
+    
     # Stock header with current price
     current_price = df['Close'].iloc[-1]
     prev_close = df['Close'].iloc[-2] if len(df) > 1 else current_price
@@ -302,11 +307,8 @@ if stock_data and selected_stock in stock_data and not stock_data[selected_stock
             row=1, col=1
         )
     
-    # Add Elliott Waves
-    if show_elliott:
-        waves = detect_elliott_waves(df['Close'], window=wave_sensitivity, min_wave_pct=min_wave_pct)
-        
-        if waves:
+    # Add Elliott Waves (use pre-calculated waves)
+    if show_elliott and waves:
             # Draw wave lines
             wave_x = [df.index[w['index']] for w in waves if w['index'] < len(df.index)]
             wave_y = [w['price'] for w in waves if w['index'] < len(df.index)]
@@ -571,8 +573,7 @@ if stock_data and selected_stock in stock_data and not stock_data[selected_stock
         st.divider()
         st.subheader("🌊 Elliott Wave Analysis")
         
-        waves = detect_elliott_waves(df['Close'], window=wave_sensitivity, min_wave_pct=min_wave_pct)
-        
+        # Use pre-calculated waves from earlier
         if waves:
             col1, col2 = st.columns(2)
             
