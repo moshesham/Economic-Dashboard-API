@@ -10,15 +10,46 @@ from pandas_datareader import data as pdr
 from datetime import datetime, timedelta
 import os
 import pickle
+import time
 from config_settings import (
     is_offline_mode, can_use_offline_data, get_cache_dir,
-    ensure_cache_dir, CACHE_EXPIRY_HOURS
+    ensure_cache_dir, CACHE_EXPIRY_HOURS, YFINANCE_RATE_LIMIT_DELAY,
+    YFINANCE_BATCH_SIZE, YFINANCE_CACHE_HOURS
 )
 from modules.auth.credentials_manager import get_credentials_manager
 
 
-def _load_cached_data(cache_file: str) -> pd.DataFrame | dict | None:
-    """Load data from cache if it exists and is not expired."""
+# Configure proxy if available (for GitHub Actions IP rotation)
+def _setup_proxy():
+    """Configure proxy settings from environment variables."""
+    proxy_url = os.environ.get('PROXY_URL')
+    if proxy_url:
+        # Set yfinance session with proxy
+        import requests
+        session = requests.Session()
+        session.proxies = {
+            'http': proxy_url,
+            'https': proxy_url
+        }
+        # Note: yfinance doesn't easily support custom sessions,
+        # but this sets up the environment for requests-based calls
+        os.environ['HTTP_PROXY'] = proxy_url
+        os.environ['HTTPS_PROXY'] = proxy_url
+        return True
+    return False
+
+# Initialize proxy on module load
+_PROXY_ENABLED = _setup_proxy()
+
+
+def _load_cached_data(cache_file: str, max_age_hours: int | None = None) -> pd.DataFrame | dict | None:
+    """Load data from cache if it exists and is not expired.
+    
+    Args:
+        cache_file: Path to cache file
+        max_age_hours: Maximum age in hours before cache is considered stale.
+                      If None, uses CACHE_EXPIRY_HOURS
+    """
     if not os.path.exists(cache_file):
         return None
 
@@ -28,7 +59,8 @@ def _load_cached_data(cache_file: str) -> pd.DataFrame | dict | None:
 
         # Check if cache is expired
         cache_time = cache_data['timestamp']
-        if datetime.now() - cache_time > timedelta(hours=CACHE_EXPIRY_HOURS):
+        expiry_hours = max_age_hours if max_age_hours is not None else CACHE_EXPIRY_HOURS
+        if datetime.now() - cache_time > timedelta(hours=expiry_hours):
             return None
 
         return cache_data['data']
@@ -175,7 +207,7 @@ def load_fred_data(series_ids: dict) -> pd.DataFrame:
 @st.cache_data(ttl=3600)
 def load_yfinance_data(tickers: dict, period: str = "5y") -> dict:
     """
-    Load market data from Yahoo Finance.
+    Load market data from Yahoo Finance with rate limiting and smart caching.
 
     Args:
         tickers: Dictionary with descriptive names as keys and ticker symbols as values
@@ -192,7 +224,7 @@ def load_yfinance_data(tickers: dict, period: str = "5y") -> dict:
     centralized_cache = f"{get_cache_dir()}/yfinance_all_tickers.pkl"
     if os.path.exists(centralized_cache):
         try:
-            cached_data = _load_cached_data(centralized_cache)
+            cached_data = _load_cached_data(centralized_cache, max_age_hours=YFINANCE_CACHE_HOURS)
             if cached_data is not None and isinstance(cached_data, dict):
                 # Filter to requested tickers
                 available_tickers = {name: data for name, data in cached_data.items() if name in tickers.keys()}
@@ -201,27 +233,59 @@ def load_yfinance_data(tickers: dict, period: str = "5y") -> dict:
         except Exception as e:
             st.warning(f"Could not load from centralized cache: {e}")
 
-    # Fallback: Try to load from individual cache
+    # Fallback: Try to load from individual cache with 24-hour expiry
     cache_key = str(sorted(tickers.items())) + period
     cache_file = f"{get_cache_dir()}/yfinance_{hash(cache_key)}.pkl"
-    cached_data = _load_cached_data(cache_file)
+    cached_data = _load_cached_data(cache_file, max_age_hours=YFINANCE_CACHE_HOURS)
     if cached_data is not None and isinstance(cached_data, dict):
-        return cached_data
+        # Check if we have all requested tickers in cache
+        if all(name in cached_data for name in tickers.keys()):
+            return cached_data
 
-    # Load from API
+    # Load from API with rate limiting
     try:
         result = {}
-        for name, ticker in tickers.items():
-            try:
-                data = yf.download(ticker, period=period, progress=False)
-                if data is not None and not data.empty:
-                    result[name] = data
-            except Exception as e:
-                st.warning(f"Could not load {name} ({ticker}): {str(e)}")
-                continue
+        ticker_list = list(tickers.items())
+        total_tickers = len(ticker_list)
+        
+        # Process in batches to avoid rate limiting
+        for i in range(0, total_tickers, YFINANCE_BATCH_SIZE):
+            batch = ticker_list[i:i + YFINANCE_BATCH_SIZE]
+            
+            for name, ticker in batch:
+                try:
+                    # Add delay between requests to respect rate limits
+                    if i > 0 or result:  # Don't delay on first request
+                        time.sleep(YFINANCE_RATE_LIMIT_DELAY)
+                    
+                    # Download with auto_adjust=True to avoid FutureWarning
+                    data = yf.download(ticker, period=period, progress=False, auto_adjust=True)
+                    
+                    if data is not None and not data.empty:
+                        # Handle MultiIndex columns for single ticker
+                        if isinstance(data.columns, pd.MultiIndex):
+                            data.columns = data.columns.get_level_values(0)
+                        result[name] = data
+                    else:
+                        st.warning(f"No data available for {name} ({ticker})")
+                except Exception as e:
+                    error_msg = str(e)
+                    # Provide more specific error messages
+                    if "Rate limit" in error_msg or "Too Many Requests" in error_msg:
+                        st.warning(f"⏱️ Rate limited on {name} ({ticker}). Using cached data if available.")
+                        # Try to load from any available cache, even if expired
+                        old_cached = _load_cached_data(cache_file, max_age_hours=168)  # 1 week
+                        if old_cached is not None and isinstance(old_cached, dict) and name in old_cached:
+                            result[name] = old_cached[name]
+                            st.info(f"Using cached data for {name} (may be up to 1 week old)")
+                    elif "No objects to concatenate" in error_msg:
+                        st.warning(f"Could not load {name} ({ticker}): Data not available for this period")
+                    else:
+                        st.warning(f"Could not load {name} ({ticker}): {error_msg}")
+                    continue
 
         if result:
-            # Save to cache
+            # Save to cache with current timestamp
             _save_cached_data(cache_file, result)
 
         return result

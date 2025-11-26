@@ -123,6 +123,9 @@ with st.sidebar:
     # Elliott Wave settings
     st.subheader("🌊 Elliott Wave")
     show_elliott = st.checkbox("Show Elliott Waves", value=True)
+    # Initialize with defaults
+    wave_sensitivity = 15
+    min_wave_pct = 0.03
     if show_elliott:
         wave_sensitivity = st.slider(
             "Wave Sensitivity",
@@ -147,11 +150,13 @@ with st.sidebar:
     if is_offline_mode():
         st.info("🔌 **Offline Mode**: Using cached/sample data")
     else:
-        st.success("🌐 **Online Mode**: Using live data")
+        st.success("🌐 **Online Mode**: Live data (cached for 24 hours)")
 
 # Main content area
+st.info("💡 Stock data is cached for 24 hours to avoid rate limiting. Data refreshes automatically after cache expires.")
+
 # Load stock data
-with st.spinner(f"Loading {selected_stock} data..."):
+with st.spinner(f"Loading {selected_stock} data (using cache if available)..."):
     stock_data = load_yfinance_data({selected_stock: selected_stock}, period=time_period)
 
 if stock_data and selected_stock in stock_data and not stock_data[selected_stock].empty:

@@ -25,6 +25,11 @@ def get_close_prices(df: pd.DataFrame, ticker: str) -> pd.Series:
         Series of close prices or None if not found
     """
     try:
+        # Handle simple case first (already flattened by data loader)
+        if 'Close' in df.columns and not isinstance(df.columns, pd.MultiIndex):
+            return df['Close']
+        
+        # Handle MultiIndex columns
         if isinstance(df.columns, pd.MultiIndex):
             # Try specific ticker column first
             close_col = ('Close', ticker)
@@ -36,9 +41,7 @@ def get_close_prices(df: pd.DataFrame, ticker: str) -> pd.Series:
                 if isinstance(close_df, pd.DataFrame):
                     return close_df.iloc[:, 0]
                 return close_df
-        else:
-            if 'Close' in df.columns:
-                return df['Close']
+        
         return None
     except Exception:
         return None
@@ -339,6 +342,9 @@ with tab_heatmap:
     st.subheader("S&P 500 Sector Heatmap")
     st.markdown("Performance of major S&P 500 sectors")
     
+    # Info about caching
+    st.info("💡 Sector data is cached for 24 hours to avoid rate limiting. Refresh the page to force reload after cache expires.")
+    
     # Time period for heatmap
     heatmap_period = st.selectbox(
         "Heatmap Period",
@@ -348,15 +354,20 @@ with tab_heatmap:
     )
     
     # Load sector ETF data
-    with st.spinner("Loading sector data..."):
+    with st.spinner("Loading sector data (may use cached data if recently fetched)..."):
         sector_data = load_yfinance_data(SECTOR_ETFS, period='1y')
     
-    if sector_data:
+    if sector_data and len(sector_data) > 0:
         sector_returns = {}
         
         for sector, ticker in SECTOR_ETFS.items():
             if sector in sector_data and not sector_data[sector].empty:
                 df = sector_data[sector]
+                
+                # Handle MultiIndex columns
+                if isinstance(df.columns, pd.MultiIndex):
+                    df.columns = df.columns.get_level_values(0)
+                
                 close_prices = get_close_prices(df, ticker)
                 
                 if close_prices is not None and len(close_prices) > 0:
@@ -450,8 +461,10 @@ with tab_heatmap:
             fig_bar.add_vline(x=0, line_dash="solid", line_color="white", opacity=0.5)
             
             st.plotly_chart(fig_bar, use_container_width=True)
+        else:
+            st.warning("No sector data available. This may be due to market hours or data provider issues.")
     else:
-        st.warning("Unable to load sector data.")
+        st.warning("Unable to load sector data. Please check your connection or try again later.")
 
 # ==================== CORRELATION TAB ====================
 with tab_correlation:
