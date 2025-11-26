@@ -43,13 +43,13 @@ col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     try:
-        gdp_growth = calculate_percentage_change('A191RL1Q225SBEA', periods=1)
+        gdp_growth = get_latest_value('A191RL1Q225SBEA')
         if gdp_growth is not None:
             st.metric(
                 label="Real GDP Growth",
                 value=f"{gdp_growth:.2f}%",
                 delta=f"{gdp_growth:.2f}% QoQ",
-                help="Quarterly real GDP growth rate"
+                help="Quarterly real GDP growth rate (annualized)"
             )
         else:
             st.metric(label="Real GDP Growth", value="N/A")

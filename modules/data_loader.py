@@ -1,6 +1,6 @@
 """
 Data loading module for Economic Dashboard.
-Handles all data fetching from FRED and Yahoo Finance with caching and offline support.
+Handles all data fetching from FRED and Yahoo Finance with DuckDB caching and offline support.
 """
 
 import streamlit as st
@@ -11,12 +11,28 @@ from datetime import datetime, timedelta
 import os
 import pickle
 import time
+from typing import Optional
 from config_settings import (
     is_offline_mode, can_use_offline_data, get_cache_dir,
     ensure_cache_dir, CACHE_EXPIRY_HOURS, YFINANCE_RATE_LIMIT_DELAY,
     YFINANCE_BATCH_SIZE, YFINANCE_CACHE_HOURS
 )
 from modules.auth.credentials_manager import get_credentials_manager
+
+# Import DuckDB database functions
+try:
+    from modules.database import (
+        get_db_connection,
+        get_fred_series,
+        get_stock_ohlcv,
+        insert_fred_data,
+        insert_stock_data,
+        insert_options_data
+    )
+    DUCKDB_AVAILABLE = True
+except ImportError:
+    DUCKDB_AVAILABLE = False
+    st.warning("DuckDB database module not available. Using legacy pickle caching.")
 
 
 # Configure proxy if available (for GitHub Actions IP rotation)
@@ -146,6 +162,26 @@ def load_fred_data(series_ids: dict) -> pd.DataFrame:
     if is_offline_mode():
         return _load_offline_fred_data(series_ids)
 
+    # Try DuckDB first if available
+    if DUCKDB_AVAILABLE and 'get_fred_series' in globals():
+        try:
+            # Get data from DuckDB
+            series_list = list(series_ids.values())
+            db_data = get_fred_series(series_list)
+            
+            if not db_data.empty:
+                # Convert from long format to wide format
+                result = db_data.pivot(index='date', columns='series_id', values='value')
+                result.index = pd.to_datetime(result.index)
+                
+                # Rename columns back to descriptive names
+                reverse_mapping = {v: k for k, v in series_ids.items()}
+                result = result.rename(columns=reverse_mapping)
+                
+                return result
+        except Exception as e:
+            st.warning(f"Could not load from DuckDB: {e}. Falling back to API.")
+
     # First, try to load from the centralized cache (updated daily by automation)
     centralized_cache = f"{get_cache_dir()}/fred_all_series.pkl"
     if os.path.exists(centralized_cache):
@@ -219,6 +255,34 @@ def load_yfinance_data(tickers: dict, period: str = "5y") -> dict:
     # Check offline mode first
     if is_offline_mode():
         return _load_offline_yfinance_data(tickers, period)
+
+    # Try DuckDB first if available
+    if DUCKDB_AVAILABLE:
+        try:
+            # Get data from DuckDB
+            ticker_list = list(tickers.values())
+            db_data = get_stock_ohlcv(ticker_list)
+            
+            if not db_data.empty:
+                # Convert to expected format (dict of DataFrames)
+                result = {}
+                for ticker in ticker_list:
+                    ticker_data = db_data[db_data['ticker'] == ticker].copy()
+                    if not ticker_data.empty:
+                        # Set date as index and select OHLCV columns
+                        ticker_data = ticker_data.set_index('date')
+                        ticker_data = ticker_data[['open', 'high', 'low', 'close', 'volume']]
+                        if 'adj_close' in ticker_data.columns:
+                            ticker_data['Adj Close'] = ticker_data['adj_close']
+                        
+                        # Find the descriptive name for this ticker
+                        name = next((k for k, v in tickers.items() if v == ticker), ticker)
+                        result[name] = ticker_data
+                
+                if result:
+                    return result
+        except Exception as e:
+            st.warning(f"Could not load from DuckDB: {e}. Falling back to API.")
 
     # First, try to load from the centralized cache (updated daily by automation)
     centralized_cache = f"{get_cache_dir()}/yfinance_all_tickers.pkl"
@@ -530,3 +594,230 @@ def calculate_percentage_change(series_id: str, periods: int = 4) -> float | Non
             except Exception:
                 pass
         return None
+
+
+@st.cache_data(ttl=1800)  # 30 minute cache for options data
+def load_options_data(ticker: str, start_date: Optional[str] = None, 
+                     end_date: Optional[str] = None) -> pd.DataFrame:
+    """
+    Load options data for a ticker from DuckDB or fetch from API.
+    
+    Args:
+        ticker: Stock ticker symbol
+        start_date: Optional start date (YYYY-MM-DD)
+        end_date: Optional end date (YYYY-MM-DD)
+        
+    Returns:
+        DataFrame with options metrics
+    """
+    # Check offline mode first
+    if is_offline_mode():
+        st.warning("Options data not available in offline mode")
+        return pd.DataFrame()
+    
+    # Try DuckDB first if available
+    if DUCKDB_AVAILABLE:
+        try:
+            # Import here to avoid circular imports
+            from modules.database.queries import get_options_data as db_get_options_data
+            db_data = db_get_options_data(ticker, start_date, end_date)
+            
+            if not db_data.empty:
+                return db_data
+        except Exception as e:
+            st.warning(f"Could not load options from DuckDB: {e}. Falling back to API.")
+    
+    # Fetch from yfinance API
+    try:
+        stock = yf.Ticker(ticker)
+        options = stock.options
+        
+        if not options:
+            st.warning(f"No options data available for {ticker}")
+            return pd.DataFrame()
+        
+        all_options_data = []
+        
+        for expiration in options[:5]:  # Limit to first 5 expirations
+            try:
+                calls = stock.option_chain(expiration).calls
+                puts = stock.option_chain(expiration).puts
+                
+                # Calculate metrics
+                calls_volume = calls['volume'].sum() if 'volume' in calls.columns else 0
+                puts_volume = puts['volume'].sum() if 'volume' in puts.columns else 0
+                calls_oi = calls['openInterest'].sum() if 'openInterest' in calls.columns else 0
+                puts_oi = puts['openInterest'].sum() if 'openInterest' in puts.columns else 0
+                
+                put_call_volume_ratio = puts_volume / calls_volume if calls_volume > 0 else 0
+                put_call_oi_ratio = puts_oi / calls_oi if calls_oi > 0 else 0
+                
+                # Calculate IV metrics (simplified)
+                calls_iv = calls['impliedVolatility'].mean() if 'impliedVolatility' in calls.columns else 0
+                puts_iv = puts['impliedVolatility'].mean() if 'impliedVolatility' in puts.columns else 0
+                
+                options_data = {
+                    'ticker': ticker,
+                    'date': datetime.now().date(),
+                    'expiration_date': expiration,
+                    'put_volume': puts_volume,
+                    'call_volume': calls_volume,
+                    'put_open_interest': puts_oi,
+                    'call_open_interest': calls_oi,
+                    'put_call_volume_ratio': put_call_volume_ratio,
+                    'put_call_oi_ratio': put_call_oi_ratio,
+                    'total_put_iv': puts_iv,
+                    'total_call_iv': calls_iv,
+                    'iv_rank': 0,  # Would need more complex calculation
+                    'iv_percentile': 0,  # Would need historical comparison
+                    'skew': puts_iv - calls_iv if puts_iv and calls_iv else 0
+                }
+                
+                all_options_data.append(options_data)
+                
+                # Rate limiting
+                time.sleep(1)
+                
+            except Exception as e:
+                st.warning(f"Could not load options for {ticker} expiring {expiration}: {e}")
+                continue
+        
+        if all_options_data:
+            result_df = pd.DataFrame(all_options_data)
+            
+            # Save to DuckDB if available
+            if DUCKDB_AVAILABLE:
+                try:
+                    insert_options_data(result_df)
+                except Exception as e:
+                    st.warning(f"Could not save options data to DuckDB: {e}")
+            
+            return result_df
+        
+        return pd.DataFrame()
+        
+    except Exception as e:
+        st.error(f"Error loading options data for {ticker}: {e}")
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=3600)  # 1 hour cache for technical features
+def load_technical_features(ticker: str, start_date: Optional[str] = None,
+                           end_date: Optional[str] = None) -> pd.DataFrame:
+    """
+    Load technical analysis features for a ticker from DuckDB or calculate them.
+    
+    Args:
+        ticker: Stock ticker symbol
+        start_date: Optional start date (YYYY-MM-DD)
+        end_date: Optional end date (YYYY-MM-DD)
+        
+    Returns:
+        DataFrame with technical indicators
+    """
+    # Check offline mode first
+    if is_offline_mode():
+        st.warning("Technical features not available in offline mode")
+        return pd.DataFrame()
+    
+    # Try DuckDB first if available
+    if DUCKDB_AVAILABLE:
+        try:
+            # Import here to avoid circular imports
+            from modules.database.queries import get_technical_features as db_get_technical_features
+            db_data = db_get_technical_features(ticker, start_date, end_date)
+            
+            if not db_data.empty:
+                return db_data
+        except Exception as e:
+            st.warning(f"Could not load technical features from DuckDB: {e}. Calculating from OHLCV.")
+    
+    # Calculate technical features from OHLCV data
+    try:
+        # Get OHLCV data first
+        ohlcv_data = load_yfinance_data({ticker: ticker}, period="2y")
+        
+        if ticker not in ohlcv_data or ohlcv_data[ticker].empty:
+            st.warning(f"No OHLCV data available for {ticker}")
+            return pd.DataFrame()
+        
+        df = ohlcv_data[ticker].copy()
+        
+        # Import technical analysis library
+        try:
+            import ta
+        except ImportError:
+            st.error("ta library not available. Install with: pip install ta")
+            return pd.DataFrame()
+        
+        # Calculate technical indicators
+        features = {}
+        
+        # Momentum indicators
+        features['rsi_14'] = ta.momentum.RSIIndicator(df['Close'], window=14).rsi()
+        features['rsi_28'] = ta.momentum.RSIIndicator(df['Close'], window=28).rsi()
+        features['stoch_k'] = ta.momentum.StochasticOscillator(df['High'], df['Low'], df['Close']).stoch()
+        features['stoch_d'] = ta.momentum.StochasticOscillator(df['High'], df['Low'], df['Close']).stoch_signal()
+        features['williams_r'] = ta.momentum.WilliamsRIndicator(df['High'], df['Low'], df['Close']).williams_r()
+        features['roc_10'] = ta.momentum.ROCIndicator(df['Close'], window=10).roc()
+        features['roc_20'] = ta.momentum.ROCIndicator(df['Close'], window=20).roc()
+        
+        # Trend indicators
+        features['sma_20'] = ta.trend.SMAIndicator(df['Close'], window=20).sma_indicator()
+        features['sma_50'] = ta.trend.SMAIndicator(df['Close'], window=50).sma_indicator()
+        features['sma_200'] = ta.trend.SMAIndicator(df['Close'], window=200).sma_indicator()
+        features['ema_12'] = ta.trend.EMAIndicator(df['Close'], window=12).ema_indicator()
+        features['ema_26'] = ta.trend.EMAIndicator(df['Close'], window=26).ema_indicator()
+        
+        macd = ta.trend.MACD(df['Close'])
+        features['macd'] = macd.macd()
+        features['macd_signal'] = macd.macd_signal()
+        features['macd_histogram'] = macd.macd_diff()
+        
+        features['adx'] = ta.trend.ADXIndicator(df['High'], df['Low'], df['Close']).adx()
+        
+        # Volatility indicators
+        bb = ta.volatility.BollingerBands(df['Close'])
+        features['bb_upper'] = bb.bollinger_hband()
+        features['bb_middle'] = bb.bollinger_mavg()
+        features['bb_lower'] = bb.bollinger_lband()
+        features['bb_width'] = (bb.bollinger_hband() - bb.bollinger_lband()) / bb.bollinger_mavg()
+        
+        features['atr_14'] = ta.volatility.AverageTrueRange(df['High'], df['Low'], df['Close'], window=14).average_true_range()
+        
+        # Volume indicators
+        features['obv'] = ta.volume.OnBalanceVolumeIndicator(df['Close'], df['Volume']).on_balance_volume()
+        features['obv_sma'] = ta.trend.SMAIndicator(features['obv'], window=20).sma_indicator()
+        features['mfi'] = ta.volume.MFIIndicator(df['High'], df['Low'], df['Close'], df['Volume']).money_flow_index()
+        features['ad_line'] = ta.volume.AccDistIndexIndicator(df['High'], df['Low'], df['Close'], df['Volume']).acc_dist_index()
+        features['cmf'] = ta.volume.ChaikinMoneyFlowIndicator(df['High'], df['Low'], df['Close'], df['Volume']).chaikin_money_flow()
+        features['vwap'] = ta.volume.VolumeWeightedAveragePrice(df['High'], df['Low'], df['Close'], df['Volume']).volume_weighted_average_price()
+        
+        # Create features DataFrame
+        features_df = pd.DataFrame(features)
+        features_df['ticker'] = ticker
+        features_df['date'] = df.index
+        
+        # Add custom indicators
+        features_df['price_to_sma20'] = df['Close'] / features_df['sma_20']
+        features_df['price_to_sma50'] = df['Close'] / features_df['sma_50']
+        features_df['price_to_sma200'] = df['Close'] / features_df['sma_200']
+        features_df['volume_ratio'] = df['Volume'] / ta.trend.SMAIndicator(df['Volume'], window=20).sma_indicator()
+        
+        # Reorder columns
+        cols = ['ticker', 'date'] + [col for col in features_df.columns if col not in ['ticker', 'date']]
+        features_df = features_df[cols]
+        
+        # Save to DuckDB if available
+        if DUCKDB_AVAILABLE:
+            try:
+                from modules.database.queries import insert_technical_features
+                insert_technical_features(features_df)
+            except Exception as e:
+                st.warning(f"Could not save technical features to DuckDB: {e}")
+        
+        return features_df
+        
+    except Exception as e:
+        st.error(f"Error calculating technical features for {ticker}: {e}")
+        return pd.DataFrame()

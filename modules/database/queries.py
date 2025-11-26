@@ -458,3 +458,24 @@ def get_prediction_accuracy(model_version: str, days_back: int = 30) -> Dict[str
         }
     
     return {'total_predictions': 0, 'correct_predictions': 0, 'accuracy': 0.0}
+
+
+def insert_technical_features(df: pd.DataFrame) -> int:
+    """
+    Insert technical features data into database
+    
+    Args:
+        df: DataFrame with technical features
+        
+    Returns:
+        Number of records inserted
+    """
+    db = get_db_connection()
+    
+    # Ensure correct dtypes
+    df = df.copy()
+    df['date'] = pd.to_datetime(df['date'])
+    
+    db.insert_df(df, 'technical_features', if_exists='append')
+    
+    return len(df)
