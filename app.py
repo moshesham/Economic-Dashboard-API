@@ -163,9 +163,9 @@ st.markdown("""
 col1, col2, col3 = st.columns([2, 1, 1])
 with col1:
     if is_offline_mode():
-        st.markdown('<span class="status-badge status-offline">⚡ Offline Mode</span>', unsafe_allow_html=True)
+        st.markdown('<span class="status-badge status-offline">📴 Offline Mode</span>', unsafe_allow_html=True)
     else:
-        st.markdown('<span class="status-badge status-online">🔴 Live Data</span>', unsafe_allow_html=True)
+        st.markdown('<span class="status-badge status-online">🟢 Live Data</span>', unsafe_allow_html=True)
 with col3:
     st.caption(f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
@@ -237,8 +237,6 @@ with col4:
 
 st.divider()
 
-st.divider()
-
 # ========== EMPLOYMENT & WAGES ==========
 st.markdown('<div class="section-header"><h3>💼 Employment & Wages</h3></div>', unsafe_allow_html=True)
 col1, col2, col3, col4 = st.columns(4)
@@ -301,8 +299,6 @@ with col4:
 
 st.divider()
 
-st.divider()
-
 # ========== CONSUMER & HOUSING ==========
 st.markdown('<div class="section-header"><h3>🏠 Consumer & Housing</h3></div>', unsafe_allow_html=True)
 col1, col2, col3, col4 = st.columns(4)
@@ -362,8 +358,6 @@ with col4:
             st.metric(label="30-Year Mortgage Rate", value="N/A")
     except:
         st.metric(label="30-Year Mortgage Rate", value="N/A")
-
-st.divider()
 
 st.divider()
 
