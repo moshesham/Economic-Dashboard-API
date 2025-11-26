@@ -129,8 +129,10 @@ class TestCBOEVIXDataLoader:
         result = fetch_cboe_vix_history()
         
         if not result.empty:
-            # VIX values should be positive
-            assert (result['close'] > 0).all() or result['close'].isna().all()
+            # VIX values should be positive (filter out NaN for check)
+            valid_closes = result['close'].dropna()
+            if len(valid_closes) > 0:
+                assert (valid_closes > 0).all(), "VIX close values should be positive"
             # Date should be valid
             assert pd.api.types.is_datetime64_any_dtype(result['date'])
 

@@ -276,6 +276,8 @@ def calculate_vix_statistics(days: int = 252) -> dict:
     
     db = get_db_connection()
     
+    # Use integer cast for safety, as LIMIT doesn't support parameterized queries in DuckDB
+    safe_days = int(days)
     query = f"""
         SELECT 
             MIN(close) as min_vix,
@@ -287,7 +289,7 @@ def calculate_vix_statistics(days: int = 252) -> dict:
         FROM (
             SELECT close FROM cboe_vix_history 
             ORDER BY date DESC 
-            LIMIT {days}
+            LIMIT {safe_days}
         )
     """
     

@@ -15,6 +15,7 @@ Requirements:
 from datetime import datetime, timedelta
 from pathlib import Path
 import sys
+import os
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
@@ -26,12 +27,12 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 
-# Default arguments
+# Default arguments - email configured via environment variable
 default_args = {
     'owner': 'economic-dashboard',
     'depends_on_past': False,
-    'email': ['your-email@example.com'],  # Update this
-    'email_on_failure': True,
+    'email': os.environ.get('AIRFLOW_ALERT_EMAIL', '').split(',') or [],
+    'email_on_failure': bool(os.environ.get('AIRFLOW_ALERT_EMAIL')),
     'email_on_retry': False,
     'retries': 3,
     'retry_delay': timedelta(minutes=5),

@@ -1011,11 +1011,12 @@ def get_latest_vix_data(days: int = 30) -> pd.DataFrame:
     """
     db = get_db_connection()
     
-    # Integer is safe to embed directly
+    # Use integer cast for safety, as LIMIT doesn't support parameterized queries in DuckDB
+    safe_days = int(days)
     query = f"""
         SELECT * FROM cboe_vix_history 
         ORDER BY date DESC 
-        LIMIT {int(days)}
+        LIMIT {safe_days}
     """
     
     return db.query(query)
