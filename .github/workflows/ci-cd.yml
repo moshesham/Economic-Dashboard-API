@@ -32,7 +32,7 @@ jobs:
         python -m py_compile app.py
         python -m py_compile modules/data_loader.py
         python -m py_compile pages/1_Economic_Indicators_Deep_Dive.py
-        python -m py_compile pages/2_Financial_Markets_Deep_Dive.py
+        python -m py_compile pages/5_Markets_and_Rates.py
 
   deploy:
     needs: test

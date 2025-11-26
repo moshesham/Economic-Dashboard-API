@@ -17,7 +17,7 @@ jobs:
       uses: actions/checkout@v4
     
     - name: Deploy to Airflow via SSH
-      if: secrets.AIRFLOW_SSH_HOST != ''
+      if: ${{ secrets.AIRFLOW_SSH_HOST != '' }}
       env:
         SSH_HOST: ${{ secrets.AIRFLOW_SSH_HOST }}
         SSH_USER: ${{ secrets.AIRFLOW_SSH_USER }}
@@ -41,7 +41,7 @@ jobs:
         rm ~/.ssh/deploy_key
     
     - name: Deploy to Astronomer (if using Astronomer)
-      if: secrets.ASTRONOMER_API_KEY != ''
+      if: ${{ secrets.ASTRONOMER_API_KEY != '' }}
       env:
         ASTRONOMER_API_KEY: ${{ secrets.ASTRONOMER_API_KEY }}
       run: |
@@ -52,7 +52,7 @@ jobs:
         astro deploy
     
     - name: Deploy to Google Cloud Composer (if using GCP)
-      if: secrets.GCP_COMPOSER_BUCKET != ''
+      if: ${{ secrets.GCP_COMPOSER_BUCKET != '' }}
       env:
         GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
         GCP_COMPOSER_BUCKET: ${{ secrets.GCP_COMPOSER_BUCKET }}
