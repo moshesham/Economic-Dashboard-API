@@ -21,6 +21,10 @@ on:
   repository_dispatch:
     types: [analyze-sentiment]
 
+# Set explicit permissions for the workflow
+permissions:
+  contents: write  # Required for pushing data updates
+
 jobs:
   fetch-news-sentiment:
     runs-on: ubuntu-latest
