@@ -6,6 +6,8 @@ from .derived_features import DerivedFeaturesCalculator
 from .feature_pipeline import FeaturePipeline
 from .leverage_metrics import LeverageMetricsCalculator
 from .margin_risk_composite import MarginCallRiskCalculator
+from .financial_health_scorer import FinancialHealthScorer
+from .sector_rotation_detector import SectorRotationDetector
 
 __all__ = [
     'TechnicalIndicatorCalculator',
@@ -13,5 +15,7 @@ __all__ = [
     'DerivedFeaturesCalculator',
     'FeaturePipeline',
     'LeverageMetricsCalculator',
-    'MarginCallRiskCalculator'
+    'MarginCallRiskCalculator',
+    'FinancialHealthScorer',
+    'SectorRotationDetector'
 ]

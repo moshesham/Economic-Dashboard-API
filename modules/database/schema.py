@@ -661,6 +661,82 @@ def create_google_trends_table():
     db.execute("CREATE INDEX IF NOT EXISTS idx_trends_date ON google_trends(date)")
 
 
+def create_financial_health_scores_table():
+    """Create table for financial health scoring (Piotroski, Altman Z-Score)"""
+    db = get_db_connection()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS financial_health_scores (
+            ticker VARCHAR NOT NULL,
+            date DATE NOT NULL,
+            cik VARCHAR,
+            piotroski_score INTEGER,
+            altman_z_score DOUBLE,
+            composite_score DOUBLE,
+            health_rating VARCHAR,
+            profitability_subscore INTEGER,
+            leverage_subscore INTEGER,
+            efficiency_subscore INTEGER,
+            risk_zone VARCHAR,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (ticker, date)
+        )
+    """)
+    
+    db.execute("CREATE INDEX IF NOT EXISTS idx_health_ticker ON financial_health_scores(ticker)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_health_date ON financial_health_scores(date)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_health_rating ON financial_health_scores(health_rating)")
+
+
+def create_sector_rotation_analysis_table():
+    """Create table for sector rotation patterns"""
+    db = get_db_connection()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS sector_rotation_analysis (
+            date DATE NOT NULL PRIMARY KEY,
+            rotation_pattern VARCHAR,
+            confidence VARCHAR,
+            offensive_avg_rs DOUBLE,
+            defensive_avg_rs DOUBLE,
+            cyclical_avg_rs DOUBLE,
+            sector_breadth DOUBLE,
+            concentration DOUBLE,
+            leading_sector_1 VARCHAR,
+            leading_sector_2 VARCHAR,
+            leading_sector_3 VARCHAR,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    
+    db.execute("CREATE INDEX IF NOT EXISTS idx_rotation_date ON sector_rotation_analysis(date)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_rotation_pattern ON sector_rotation_analysis(rotation_pattern)")
+
+
+def create_sector_relative_strength_table():
+    """Create table for individual sector relative strength metrics"""
+    db = get_db_connection()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS sector_relative_strength (
+            sector VARCHAR NOT NULL,
+            ticker VARCHAR NOT NULL,
+            date DATE NOT NULL,
+            sector_return DOUBLE,
+            spy_return DOUBLE,
+            relative_strength DOUBLE,
+            momentum DOUBLE,
+            trend VARCHAR,
+            volatility DOUBLE,
+            classification VARCHAR,
+            rs_rank INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (sector, date)
+        )
+    """)
+    
+    db.execute("CREATE INDEX IF NOT EXISTS idx_sector_rs_date ON sector_relative_strength(date)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_sector_rs_ticker ON sector_relative_strength(ticker)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_sector_rs_classification ON sector_relative_strength(classification)")
+
+
 def create_all_tables():
     """Create all database tables"""
     print("Creating database schema...")
@@ -737,6 +813,16 @@ def create_all_tables():
     
     create_google_trends_table()
     print("✓ Created google_trends table")
+    
+    # Financial Health & Sector Rotation Tables
+    create_financial_health_scores_table()
+    print("✓ Created financial_health_scores table")
+    
+    create_sector_rotation_analysis_table()
+    print("✓ Created sector_rotation_analysis table")
+    
+    create_sector_relative_strength_table()
+    print("✓ Created sector_relative_strength table")
     
     print("\nDatabase schema created successfully!")
 
