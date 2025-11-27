@@ -1,5 +1,8 @@
 # Streamlit configuration for Development Environment
-# This config is used when DASHBOARD_ENV=development
+#
+# NOTE: Streamlit does not automatically switch configs based on DASHBOARD_ENV.
+# To use this config, copy it to .streamlit/config.toml or set STREAMLIT_CONFIG_FILE.
+# This file serves as a reference for development-specific settings.
 
 [theme]
 primaryColor = "#0068c9"

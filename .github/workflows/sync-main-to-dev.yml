@@ -34,15 +34,28 @@ jobs:
       id: check_changes
       run: |
         git fetch origin main dev
-        DIFF_COUNT=$(git rev-list --count origin/dev..origin/main)
-        echo "diff_count=$DIFF_COUNT" >> $GITHUB_OUTPUT
         
-        if [ "$DIFF_COUNT" -eq "0" ]; then
-          echo "No commits to sync from main to dev"
+        # Check if there are commits in main that aren't in dev
+        # Use merge-base to find the common ancestor and compare
+        MERGE_BASE=$(git merge-base origin/main origin/dev)
+        MAIN_HEAD=$(git rev-parse origin/main)
+        
+        if [ "$MERGE_BASE" = "$MAIN_HEAD" ]; then
+          echo "Main is fully merged into dev - no sync needed"
           echo "has_changes=false" >> $GITHUB_OUTPUT
+          echo "diff_count=0" >> $GITHUB_OUTPUT
         else
-          echo "$DIFF_COUNT commits to sync from main to dev"
-          echo "has_changes=true" >> $GITHUB_OUTPUT
+          # Count commits in main that aren't in dev
+          DIFF_COUNT=$(git rev-list --count origin/dev..origin/main)
+          echo "diff_count=$DIFF_COUNT" >> $GITHUB_OUTPUT
+          
+          if [ "$DIFF_COUNT" -eq "0" ]; then
+            echo "No commits to sync from main to dev"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "$DIFF_COUNT commits to sync from main to dev"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
         fi
 
     - name: Create sync PR

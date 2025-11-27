@@ -4,6 +4,7 @@ Determines the current environment and provides environment-specific settings.
 """
 
 import os
+from functools import lru_cache
 from typing import Dict, Any
 
 # Environment names
@@ -42,15 +43,11 @@ def is_development() -> bool:
     return get_environment() == ENV_DEVELOPMENT
 
 
-def get_env_config() -> Dict[str, Any]:
-    """
-    Get environment-specific configuration.
-    
-    Returns a dictionary with settings appropriate for the current environment.
-    """
-    env = get_environment()
-    
-    if env == ENV_PRODUCTION:
+# Cache configurations by environment name to avoid rebuilding dictionaries
+@lru_cache(maxsize=2)
+def _build_config(env_name: str) -> Dict[str, Any]:
+    """Build and cache configuration for the specified environment."""
+    if env_name == ENV_PRODUCTION:
         return {
             'env_name': ENV_PRODUCTION,
             'debug': False,
@@ -78,6 +75,16 @@ def get_env_config() -> Dict[str, Any]:
         }
 
 
+def get_env_config() -> Dict[str, Any]:
+    """
+    Get environment-specific configuration.
+    
+    Returns a dictionary with settings appropriate for the current environment.
+    Configuration is cached per environment for performance.
+    """
+    return _build_config(get_environment())
+
+
 def get_config_value(key: str, default: Any = None) -> Any:
     """
     Get a specific configuration value for the current environment.
@@ -89,5 +96,4 @@ def get_config_value(key: str, default: Any = None) -> Any:
     Returns:
         The configuration value or default
     """
-    config = get_env_config()
-    return config.get(key, default)
+    return get_env_config().get(key, default)

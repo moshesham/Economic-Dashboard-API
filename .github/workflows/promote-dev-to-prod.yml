@@ -61,7 +61,13 @@ jobs:
         DASHBOARD_ENV: production
       run: |
         echo "Running tests with production configuration..."
-        python -m pytest tests/ -v --tb=short || echo "Some tests may fail due to missing API keys (expected in CI)"
+        # Run tests but allow API-related failures (expected in CI without secrets)
+        python -m pytest tests/ -v --tb=short --ignore=tests/test_api_integration.py 2>&1 || {
+          exit_code=$?
+          # Check if failure is due to missing API keys (expected) vs actual test failures
+          echo "::warning::Some tests failed. Review logs to ensure failures are only due to missing API keys."
+          exit $exit_code
+        }
 
     - name: Check code quality
       run: |
