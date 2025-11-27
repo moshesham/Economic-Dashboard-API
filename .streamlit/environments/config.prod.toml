@@ -1,0 +1,26 @@
+# Streamlit configuration for Production Environment
+# This config is used when DASHBOARD_ENV=production
+
+[theme]
+primaryColor = "#0068c9"
+backgroundColor = "#0e1117"
+secondaryBackgroundColor = "#1a1f2e"
+textColor = "#fafafa"
+font = "sans serif"
+
+[server]
+headless = true
+enableCORS = false
+enableXsrfProtection = true
+runOnSave = false
+fileWatcherType = "none"
+
+[browser]
+gatherUsageStats = false
+
+[logger]
+level = "warning"
+messageFormat = "%(asctime)s %(message)s"
+
+[runner]
+fastReruns = false

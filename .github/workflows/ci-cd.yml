@@ -2,9 +2,13 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, dev ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, dev ]
+
+env:
+  # Set environment based on branch
+  DASHBOARD_ENV: ${{ github.ref == 'refs/heads/main' && 'production' || 'development' }}
 
 jobs:
   test:
@@ -30,7 +34,14 @@ jobs:
         mkdir -p data/cache
         mkdir -p tests
 
+    - name: Display environment info
+      run: |
+        echo "Running in ${{ env.DASHBOARD_ENV }} environment"
+        echo "Branch: ${{ github.ref }}"
+
     - name: Run tests
+      env:
+        DASHBOARD_ENV: ${{ env.DASHBOARD_ENV }}
       run: |
         python -m pytest tests/ -v --tb=short || echo "Some tests may fail due to missing API keys (expected in CI)"
 
@@ -38,6 +49,7 @@ jobs:
       run: |
         python -m py_compile app.py
         python -m py_compile modules/data_loader.py
+        python -m py_compile environments/config.py
         
         # Check all page files
         for file in pages/*.py; do
@@ -50,17 +62,42 @@ jobs:
         python -m py_compile modules/features/financial_health_scorer.py
         python -m py_compile modules/features/sector_rotation_detector.py
 
-  deploy:
+  deploy-dev:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
+    environment: development
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Deploy to Streamlit Cloud
+    - name: Deploy to Development Environment
+      env:
+        DASHBOARD_ENV: development
       run: |
+        echo "🚀 Deploying to Development Environment"
+        echo "Branch: dev"
+        echo "Environment: development"
+        # Placeholder for dev deployment
+        # Add your dev deployment commands here
+
+  deploy-prod:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Deploy to Production Environment
+      env:
+        DASHBOARD_ENV: production
+      run: |
+        echo "🚀 Deploying to Production Environment"
+        echo "Branch: main"
+        echo "Environment: production"
         # Placeholder for Streamlit Cloud deployment
         # In a real scenario, you would use Streamlit's deployment action
-        echo "Deployment would happen here"
+        echo "Production deployment would happen here"
         # streamlit deploy command or similar
