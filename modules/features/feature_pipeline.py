@@ -14,6 +14,8 @@ from typing import Optional, List
 from modules.features.technical_indicators import TechnicalIndicatorCalculator
 from modules.features.options_metrics import OptionsMetricsCalculator
 from modules.features.derived_features import DerivedFeaturesCalculator
+from modules.features.leverage_metrics import LeverageMetricsCalculator
+from modules.features.margin_risk_composite import MarginCallRiskCalculator
 from modules.database import get_db_connection
 
 
@@ -24,6 +26,8 @@ class FeaturePipeline:
         self.tech_calc = TechnicalIndicatorCalculator()
         self.options_calc = OptionsMetricsCalculator()
         self.derived_calc = DerivedFeaturesCalculator()
+        self.leverage_calc = LeverageMetricsCalculator()
+        self.margin_risk_calc = MarginCallRiskCalculator()
         self.db = get_db_connection()
     
     def run_full_pipeline(
@@ -92,8 +96,41 @@ class FeaturePipeline:
             }
             print(f"  ✅ {len(derived_features)} derived feature records")
             
-            # Step 4: Data quality check
-            print(f"\n✓ Step 4: Running data quality checks...")
+            # Step 4: Calculate margin call risk
+            print(f"\n⚠️  Step 4: Calculating margin call risk for {ticker}...")
+            try:
+                # First fetch leverage metrics (short interest)
+                short_interest = self.leverage_calc.fetch_short_interest(ticker)
+                if short_interest:
+                    self.leverage_calc.store_short_interest(ticker, short_interest)
+                    print(f"  ✅ Short interest data stored")
+                
+                # Calculate composite margin risk
+                margin_risk = self.margin_risk_calc.calculate_and_store(ticker)
+                
+                if margin_risk:
+                    results['steps']['margin_risk'] = {
+                        'status': 'success',
+                        'composite_score': margin_risk['composite_risk_score'],
+                        'risk_level': margin_risk['risk_level']
+                    }
+                    print(f"  ✅ Margin risk score: {margin_risk['composite_risk_score']:.1f} ({margin_risk['risk_level']})")
+                else:
+                    results['steps']['margin_risk'] = {
+                        'status': 'failed',
+                        'error': 'No risk data calculated'
+                    }
+                    print(f"  ⚠️  Could not calculate margin risk")
+                    
+            except Exception as e:
+                results['steps']['margin_risk'] = {
+                    'status': 'failed',
+                    'error': str(e)
+                }
+                print(f"  ⚠️  Margin risk calculation failed: {e}")
+            
+            # Step 5: Data quality check
+            print(f"\n✓ Step 5: Running data quality checks...")
             quality_report = self.validate_features(ticker, start_date, end_date)
             results['quality'] = quality_report
             
