@@ -4,7 +4,7 @@
 # ============================================================================
 # Stage 1: Base image with system dependencies
 # ============================================================================
-FROM python:3.11-slim as base
+FROM python:3.11-slim AS base
 
 # Prevent Python from writing pyc files and buffering stdout/stderr
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -28,7 +28,7 @@ WORKDIR /app
 # ============================================================================
 # Stage 2: Dependencies installation
 # ============================================================================
-FROM base as dependencies
+FROM base AS dependencies
 
 # Copy requirements first for better caching
 COPY requirements.txt .
@@ -37,7 +37,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # ============================================================================
 # Stage 3: Production image
 # ============================================================================
-FROM dependencies as production
+FROM dependencies AS production
 
 # Copy application code
 COPY --chown=appuser:appgroup . .
@@ -59,7 +59,7 @@ EXPOSE 8000 8501
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
+    CMD curl -f http://localhost:8000/health || exit 1
 
 # Default command (overridden by docker-compose)
 CMD ["python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
