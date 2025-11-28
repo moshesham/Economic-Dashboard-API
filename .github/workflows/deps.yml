@@ -1,0 +1,73 @@
+# Dependency Updates Workflow
+name: Dependency Updates
+
+on:
+  schedule:
+    # Run every Monday at 00:00 UTC
+    - cron: '0 0 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  # ============================================================================
+  # Update Python Dependencies
+  # ============================================================================
+  update-dependencies:
+    name: Update Python Dependencies
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install pip-tools
+        run: pip install pip-tools
+      
+      - name: Upgrade dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt --upgrade
+          pip freeze > requirements-updated.txt
+      
+      - name: Check for changes
+        id: check
+        run: |
+          if ! diff -q requirements.txt requirements-updated.txt > /dev/null 2>&1; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+            mv requirements-updated.txt requirements.txt
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create Pull Request
+        if: steps.check.outputs.changes == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore(deps): Update Python dependencies'
+          title: '⬆️ Update Python Dependencies'
+          body: |
+            ## Automated Dependency Update
+            
+            This PR was automatically created by the dependency update workflow.
+            
+            ### Changes
+            - Updated Python dependencies to their latest compatible versions
+            
+            ### Checklist
+            - [ ] CI passes
+            - [ ] No breaking changes detected
+            - [ ] Ready to merge
+          branch: deps/update-python-dependencies
+          delete-branch: true
+          labels: |
+            dependencies
+            automated
