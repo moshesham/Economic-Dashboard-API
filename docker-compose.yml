@@ -1,0 +1,184 @@
+# Economic Dashboard API - Docker Compose Configuration
+# Multi-service architecture with API, Worker, Dashboard, and Redis
+
+version: '3.9'
+
+services:
+  # ============================================================================
+  # API Service - FastAPI REST endpoints
+  # ============================================================================
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: economic-api
+    command: >
+      python -m uvicorn api.main:app 
+      --host 0.0.0.0 
+      --port 8000 
+      --workers 4
+      --reload
+    ports:
+      - "8000:8000"
+    environment:
+      - DUCKDB_PATH=/app/data/duckdb/economic_dashboard.duckdb
+      - DUCKDB_READ_ONLY=true
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=INFO
+      - API_KEY_ENABLED=true
+      - PYTHONPATH=/app
+    volumes:
+      - duckdb_data:/app/data/duckdb:ro
+      - cache_data:/app/data/cache:ro
+      - ./logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+      worker:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - economic-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ============================================================================
+  # Worker Service - Background data processing and ML training
+  # ============================================================================
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: economic-worker
+    command: python -m services.scheduler
+    environment:
+      - DUCKDB_PATH=/app/data/duckdb/economic_dashboard.duckdb
+      - DUCKDB_READ_ONLY=false
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=INFO
+      - PYTHONPATH=/app
+      # API Keys (load from .env)
+      - FRED_API_KEY=${FRED_API_KEY:-}
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY:-}
+      - NEWS_API_KEY=${NEWS_API_KEY:-}
+    volumes:
+      - duckdb_data:/app/data/duckdb:rw
+      - cache_data:/app/data/cache:rw
+      - backup_data:/app/data/backups:rw
+      - ./logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - economic-network
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
+
+  # ============================================================================
+  # Dashboard Service - Streamlit visualization (optional)
+  # ============================================================================
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: economic-dashboard
+    command: >
+      streamlit run app.py 
+      --server.port=8501 
+      --server.address=0.0.0.0
+      --server.headless=true
+      --browser.gatherUsageStats=false
+    ports:
+      - "8501:8501"
+    environment:
+      - DUCKDB_PATH=/app/data/duckdb/economic_dashboard.duckdb
+      - DUCKDB_READ_ONLY=true
+      - API_BASE_URL=http://api:8000
+      - PYTHONPATH=/app
+    volumes:
+      - duckdb_data:/app/data/duckdb:ro
+      - cache_data:/app/data/cache:ro
+      - ./.streamlit:/app/.streamlit:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - economic-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    profiles:
+      - with-dashboard  # Only starts with: docker-compose --profile with-dashboard up
+
+  # ============================================================================
+  # Redis Service - Caching and message queue
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: economic-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - economic-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  economic-network:
+    driver: bridge
+    name: economic-network
+
+# ============================================================================
+# Volumes - Persistent data storage
+# ============================================================================
+volumes:
+  duckdb_data:
+    driver: local
+    name: economic-duckdb-data
+  cache_data:
+    driver: local
+    name: economic-cache-data
+  backup_data:
+    driver: local
+    name: economic-backup-data
+  redis_data:
+    driver: local
+    name: economic-redis-data

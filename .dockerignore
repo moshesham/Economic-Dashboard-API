@@ -1,0 +1,69 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Tests (include in dev, exclude in prod)
+# tests/
+
+# Data (mounted as volumes)
+data/cache/*
+data/backups/*
+data/duckdb/*.duckdb
+data/duckdb/temp/*
+data/duckdb/archives/*
+data/duckdb/snapshots/*
+!data/.gitkeep
+
+# Logs
+logs/
+*.log
+
+# Notebooks
+*.ipynb
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Credentials
+data/credentials/
+*.pem
+*.key
