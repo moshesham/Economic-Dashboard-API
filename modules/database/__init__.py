@@ -1,10 +1,11 @@
 """
-DuckDB Database Module
+Database Module
 
 Provides connection management, schema creation, and query interface for the Economic Dashboard.
+Supports both DuckDB (dev) and PostgreSQL (prod).
 """
 
-from .connection import get_db_connection, close_db_connection, init_database
+from .factory import get_db_connection, close_db_connection
 from .queries import (
     get_fred_series,
     get_stock_ohlcv,
@@ -33,7 +34,6 @@ from .queries import (
 __all__ = [
     'get_db_connection',
     'close_db_connection',
-    'init_database',
     'get_fred_series',
     'get_stock_ohlcv',
     'get_options_data',

@@ -76,6 +76,45 @@ def create_options_data_table():
     db.execute("CREATE INDEX IF NOT EXISTS idx_options_date ON options_data(date)")
 
 
+def create_ici_etf_weekly_flows_table():
+    """Create table for ICI weekly ETF flow statistics"""
+    db = get_db_connection()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS ici_etf_weekly_flows (
+            week_ending DATE NOT NULL,
+            fund_type VARCHAR NOT NULL,
+            estimated_flows DOUBLE,
+            total_net_assets DOUBLE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (week_ending, fund_type)
+        )
+    """)
+
+    db.execute("CREATE INDEX IF NOT EXISTS idx_ici_week_end ON ici_etf_weekly_flows(week_ending)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_ici_week_fund ON ici_etf_weekly_flows(fund_type)")
+
+
+def create_ici_etf_flows_table():
+    """Create table for ICI monthly ETF flow statistics"""
+    db = get_db_connection()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS ici_etf_flows (
+            date DATE NOT NULL,
+            fund_category VARCHAR NOT NULL,
+            net_new_cash_flow DOUBLE,
+            net_issuance DOUBLE,
+            redemptions DOUBLE,
+            reinvested_dividends DOUBLE,
+            total_net_assets DOUBLE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (date, fund_category)
+        )
+    """)
+
+    db.execute("CREATE INDEX IF NOT EXISTS idx_ici_month_date ON ici_etf_flows(date)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_ici_month_category ON ici_etf_flows(fund_category)")
+
+
 def create_market_indicators_table():
     """Create table for market-level indicators"""
     db = get_db_connection()
@@ -96,6 +135,45 @@ def create_market_indicators_table():
     """)
     
     db.execute("CREATE INDEX IF NOT EXISTS idx_market_date ON market_indicators(date)")
+
+
+def create_cboe_vix_history_table():
+    """Create table for raw CBOE VIX OHLC data"""
+    db = get_db_connection()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS cboe_vix_history (
+            date DATE NOT NULL,
+            open DOUBLE,
+            high DOUBLE,
+            low DOUBLE,
+            close DOUBLE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (date)
+        )
+    """)
+
+    db.execute("CREATE INDEX IF NOT EXISTS idx_cboe_vix_date ON cboe_vix_history(date)")
+
+
+def create_cboe_vix_term_structure_table():
+    """Create table for CBOE VIX futures term structure"""
+    db = get_db_connection()
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS cboe_vix_term_structure (
+            date DATE NOT NULL,
+            expiration_date DATE,
+            days_to_expiration INTEGER,
+            contract_symbol VARCHAR,
+            settlement DOUBLE,
+            vix_index DOUBLE,
+            basis DOUBLE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (date, days_to_expiration)
+        )
+    """)
+
+    db.execute("CREATE INDEX IF NOT EXISTS idx_cboe_vix_term_date ON cboe_vix_term_structure(date)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_cboe_vix_term_expiration ON cboe_vix_term_structure(expiration_date)")
 
 
 def create_technical_features_table():
@@ -689,9 +767,21 @@ def create_all_tables():
     
     create_options_data_table()
     print("✓ Created options_data table")
+
+    create_ici_etf_weekly_flows_table()
+    print("✓ Created ici_etf_weekly_flows table")
+
+    create_ici_etf_flows_table()
+    print("✓ Created ici_etf_flows table")
     
     create_market_indicators_table()
     print("✓ Created market_indicators table")
+
+    create_cboe_vix_history_table()
+    print("✓ Created cboe_vix_history table")
+
+    create_cboe_vix_term_structure_table()
+    print("✓ Created cboe_vix_term_structure table")
     
     create_technical_features_table()
     print("✓ Created technical_features table")
