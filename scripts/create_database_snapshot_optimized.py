@@ -183,6 +183,8 @@ def create_partitioned_snapshot():
             result = export_table_to_parquet(table, date_column='date', days_to_export=90)
             if result:
                 hot_exports.append(result)
+        else:
+            print(f"  • Table {table} does not exist, skipping")
     
     # Export cold tables (incremental - only new data)
     print("\n❄️  Exporting COLD tables (incremental)...")
@@ -205,6 +207,8 @@ def create_partitioned_snapshot():
             result = export_table_to_parquet(table, date_column=date_col, incremental=True)
             if result:
                 cold_exports.append(result)
+        else:
+            print(f"  • Table {table} does not exist, skipping")
     
     # Calculate total exported size
     total_size_mb = sum([f.stat().st_size / (1024 * 1024) for f in hot_exports + cold_exports])
@@ -215,7 +219,18 @@ def create_partitioned_snapshot():
     print(f"Hot table exports: {len(hot_exports)}")
     print(f"Cold table exports: {len(cold_exports)}")
     print(f"Total Parquet size: {total_size_mb:.2f} MB")
-    print(f"Compression ratio: {(db_size_before['database_file_mb'] / total_size_mb):.1f}x")
+    
+    # Only calculate compression ratio if we have exported data
+    if total_size_mb > 0:
+        compression_ratio = db_size_before['database_file_mb'] / total_size_mb
+        print(f"Compression ratio: {compression_ratio:.1f}x")
+    else:
+        print("Compression ratio: N/A (no data exported)")
+        print("\n⚠️  WARNING: No data was exported. This may indicate:")
+        print("   - Empty database with no tables")
+        print("   - All tables are empty")
+        print("   - Incremental export found no new data since last run")
+    
     print("=" * 70)
     
     return {

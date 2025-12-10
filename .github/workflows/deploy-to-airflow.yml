@@ -19,8 +19,17 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
     
+    - name: Check SSH credentials
+      id: check_ssh
+      run: |
+        if [ -n "${{ secrets.AIRFLOW_SSH_HOST }}" ]; then
+          echo "ssh_available=true" >> $GITHUB_OUTPUT
+        else
+          echo "ssh_available=false" >> $GITHUB_OUTPUT
+        fi
+    
     - name: Deploy to Airflow via SSH
-      if: ${{ secrets.AIRFLOW_SSH_HOST != '' }}
+      if: steps.check_ssh.outputs.ssh_available == 'true'
       env:
         SSH_HOST: ${{ secrets.AIRFLOW_SSH_HOST }}
         SSH_USER: ${{ secrets.AIRFLOW_SSH_USER }}
@@ -43,8 +52,17 @@ jobs:
         # Cleanup
         rm ~/.ssh/deploy_key
     
+    - name: Check Astronomer credentials
+      id: check_astronomer
+      run: |
+        if [ -n "${{ secrets.ASTRONOMER_API_KEY }}" ]; then
+          echo "astronomer_available=true" >> $GITHUB_OUTPUT
+        else
+          echo "astronomer_available=false" >> $GITHUB_OUTPUT
+        fi
+    
     - name: Deploy to Astronomer (if using Astronomer)
-      if: ${{ secrets.ASTRONOMER_API_KEY != '' }}
+      if: steps.check_astronomer.outputs.astronomer_available == 'true'
       env:
         ASTRONOMER_API_KEY: ${{ secrets.ASTRONOMER_API_KEY }}
       run: |
@@ -54,8 +72,17 @@ jobs:
         # Deploy to Astronomer
         astro deploy
     
+    - name: Check GCP credentials
+      id: check_gcp
+      run: |
+        if [ -n "${{ secrets.GCP_COMPOSER_BUCKET }}" ]; then
+          echo "gcp_available=true" >> $GITHUB_OUTPUT
+        else
+          echo "gcp_available=false" >> $GITHUB_OUTPUT
+        fi
+    
     - name: Deploy to Google Cloud Composer (if using GCP)
-      if: ${{ secrets.GCP_COMPOSER_BUCKET != '' }}
+      if: steps.check_gcp.outputs.gcp_available == 'true'
       env:
         GCP_PROJECT: ${{ secrets.GCP_PROJECT }}
         GCP_COMPOSER_BUCKET: ${{ secrets.GCP_COMPOSER_BUCKET }}

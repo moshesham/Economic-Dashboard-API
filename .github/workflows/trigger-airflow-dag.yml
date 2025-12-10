@@ -24,7 +24,18 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+    - name: Validate Airflow credentials
+      id: validate_creds
+      run: |
+        if [ -z "${{ secrets.AIRFLOW_URL }}" ] || [ -z "${{ secrets.AIRFLOW_USERNAME }}" ] || [ -z "${{ secrets.AIRFLOW_PASSWORD }}" ]; then
+          echo "creds_available=false" >> $GITHUB_OUTPUT
+          echo "::warning::Airflow credentials not fully configured in repository secrets"
+        else
+          echo "creds_available=true" >> $GITHUB_OUTPUT
+        fi
+    
     - name: Trigger Airflow DAG via API
+      if: steps.validate_creds.outputs.creds_available == 'true'
       env:
         AIRFLOW_URL: ${{ secrets.AIRFLOW_URL }}  # e.g., https://your-airflow.com
         AIRFLOW_USERNAME: ${{ secrets.AIRFLOW_USERNAME }}
@@ -59,7 +70,7 @@ jobs:
         fi
     
     - name: Monitor DAG execution (optional)
-      if: success()
+      if: success() && steps.validate_creds.outputs.creds_available == 'true'
       env:
         AIRFLOW_URL: ${{ secrets.AIRFLOW_URL }}
         AIRFLOW_USERNAME: ${{ secrets.AIRFLOW_USERNAME }}
@@ -98,6 +109,12 @@ jobs:
         
         echo "⚠️ DAG still running after ${MAX_WAIT}s"
         exit 0  # Don't fail if still running
+    
+    - name: Skip notification (no credentials)
+      if: steps.validate_creds.outputs.creds_available == 'false'
+      run: |
+        echo "::warning::Skipping Airflow DAG trigger - credentials not configured"
+        echo "To enable this workflow, add AIRFLOW_URL, AIRFLOW_USERNAME, and AIRFLOW_PASSWORD to repository secrets."
     
     - name: Create summary
       if: always()

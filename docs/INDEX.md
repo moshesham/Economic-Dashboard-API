@@ -9,6 +9,7 @@ Use this index to navigate the project documentation.
 - Operations
   - `DATA_REFRESH_SLA.md`: Data freshness and SLAs
   - `AUTOMATED_DATA_REFRESH.md`: Scheduler and jobs
+  - `WORKFLOW_IMPROVEMENTS.md`: GitHub Actions workflows guide
 - Features
   - `NEWS_SENTIMENT_FEATURE.md`: Sentiment pipeline
   - `FEATURE_API_KEY_MANAGEMENT.md`: Key management

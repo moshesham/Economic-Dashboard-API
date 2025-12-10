@@ -24,6 +24,10 @@ on:
       - 'scripts/refresh_data.py'
       - '.github/workflows/data-refresh.yml'
 
+# Explicit permissions required for pushing changes
+permissions:
+  contents: write
+
 jobs:
   refresh-data:
     runs-on: ubuntu-latest
@@ -35,6 +39,7 @@ jobs:
       uses: actions/checkout@v4
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
+        persist-credentials: true
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -89,7 +94,36 @@ jobs:
         git config --local user.name "github-actions[bot]"
         git add data/cache data/backups
         git commit -m "chore: daily data refresh $(date +'%Y-%m-%d %H:%M UTC')"
-        git push
+        
+        # Pull with rebase and retry logic to handle concurrent pushes
+        MAX_RETRIES=3
+        RETRY_COUNT=0
+        
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+          echo "Push attempt $((RETRY_COUNT + 1)) of $MAX_RETRIES"
+          
+          # Pull latest changes with rebase
+          git pull --rebase origin main || {
+            echo "Rebase conflict - attempting to resolve"
+            # Prefer our changes for data files
+            git checkout --ours data/cache data/backups
+            git add data/cache data/backups
+            git rebase --continue || true
+          }
+          
+          # Try to push
+          if git push origin main; then
+            echo "✅ Successfully pushed changes"
+            exit 0
+          else
+            echo "Push failed, retrying..."
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            sleep $((2 ** RETRY_COUNT))  # Exponential backoff
+          fi
+        done
+        
+        echo "::error::Failed to push after $MAX_RETRIES attempts"
+        exit 1
     
     - name: Upload cache as artifact
       uses: actions/upload-artifact@v4
