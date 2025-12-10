@@ -8,6 +8,7 @@ import sys
 import os
 import subprocess
 import time
+import importlib
 
 def run_tests():
     """Run the test suite."""
@@ -61,13 +62,13 @@ def test_offline_mode():
     import os
     os.environ['ECONOMIC_DASHBOARD_OFFLINE'] = 'true'
 
+    config_module = None
     try:
         # Reload config to pick up environment variable
-        import importlib
-        import config
-        importlib.reload(config)
+        import config_settings as config
+        config_module = importlib.reload(config)
 
-        if not config.is_offline_mode():
+        if not config_module.is_offline_mode():
             print("❌ Could not enable offline mode")
             return False
 
@@ -96,7 +97,8 @@ def test_offline_mode():
     finally:
         # Reset environment
         os.environ.pop('ECONOMIC_DASHBOARD_OFFLINE', None)
-        importlib.reload(config)
+        if config_module:
+            importlib.reload(config_module)
 
 def main():
     """Main testing function."""

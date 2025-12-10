@@ -11,7 +11,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 import logging
 import os
 
-from api.v1.routes import data, features, predictions, signals, portfolio, health
+from api.v1.routes import data, features, predictions, signals, portfolio, health, ingest
 from core.config import settings
 from core.logging import setup_logging
 
@@ -29,9 +29,8 @@ async def lifespan(app: FastAPI):
     logger.info(f"DuckDB Path: {settings.DUCKDB_PATH}")
     
     # Initialize database connection
-    from modules.database import get_db_connection, init_database
+    from modules.database import get_db_connection
     try:
-        init_database()
         db = get_db_connection()
         logger.info("Database connection established")
     except Exception as e:
@@ -89,6 +88,7 @@ app.include_router(features.router, prefix="/v1/features", tags=["Features"])
 app.include_router(predictions.router, prefix="/v1/predictions", tags=["Predictions"])
 app.include_router(signals.router, prefix="/v1/signals", tags=["Signals"])
 app.include_router(portfolio.router, prefix="/v1/portfolio", tags=["Portfolio"])
+app.include_router(ingest.router, prefix="/v1", tags=["Ingestion"])
 
 
 @app.get("/")

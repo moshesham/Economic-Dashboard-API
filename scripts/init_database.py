@@ -1,17 +1,20 @@
 """
-Initialize DuckDB Database
+Initialize Database
 
 Creates all tables and indexes for the Economic Dashboard.
 Run this script once before using the database.
+Supports both DuckDB and PostgreSQL.
 """
 
 import sys
 from pathlib import Path
+import os
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from modules.database import init_database, get_db_connection
+from modules.database.factory import get_db_connection, get_backend
+from modules.database.postgres_schema import create_all_tables
 
 
 def main():
@@ -21,24 +24,56 @@ def main():
     print()
     
     try:
+        # Get database backend
+        db_backend = get_backend()
+        backend_name = db_backend.__class__.__name__
+        print(f"Using database backend: {backend_name}")
+        
         # Initialize database schema
-        init_database()
+        if backend_name == 'PostgreSQLBackend':
+            print("Creating PostgreSQL tables...")
+            from modules.database.postgres_schema import create_all_tables
+            create_all_tables(db_backend)
+        elif backend_name == 'DuckDBBackend':
+            print("DuckDB tables are created on first access...")
+        else:
+            raise ValueError(f"Unsupported backend: {backend_name}")
         
         # Verify tables were created
         print("\nVerifying database setup...")
         db = get_db_connection()
         
-        tables = db.query("""
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'main'
-            ORDER BY table_name
-        """)
+        if backend_name == 'PostgreSQLBackend':
+            tables_query = """
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public'
+                ORDER BY table_name
+            """
+            tables = db.query(tables_query)
+            table_list = tables['table_name'].tolist()
+        else:  # DuckDB
+            tables_query = """
+                SELECT name as table_name
+                FROM sqlite_master 
+                WHERE type='table' AND name NOT LIKE 'sqlite_%'
+                ORDER BY name
+            """
+            tables = db.query(tables_query)
+            table_list = tables['table_name'].tolist()
         
-        print(f"\nFound {len(tables)} tables:")
-        for table in tables['table_name']:
-            count = db.get_row_count(table)
-            print(f"  • {table}: {count} records")
+        print(f"\nFound {len(table_list)} tables:")
+        for table in table_list:
+            try:
+                if backend_name == 'PostgreSQLBackend':
+                    count_query = f"SELECT COUNT(*) as count FROM {table}"
+                else:
+                    count_query = f"SELECT COUNT(*) as count FROM {table}"
+                count_result = db.query(count_query)
+                count = count_result['count'].iloc[0]
+                print(f"  • {table}: {count} records")
+            except Exception as e:
+                print(f"  • {table}: Error getting count - {e}")
         
         print("\n" + "=" * 60)
         print("Database initialization completed successfully!")

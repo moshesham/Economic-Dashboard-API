@@ -7,7 +7,7 @@ Pre-built queries for common data access patterns.
 import pandas as pd
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
-from .connection import get_db_connection
+from .factory import get_db_connection
 
 
 # ============================================================================
@@ -497,6 +497,30 @@ def insert_technical_features(df: pd.DataFrame) -> int:
     df['date'] = pd.to_datetime(df['date'])
     
     db.insert_df(df, 'technical_features', if_exists='append')
+    
+    return len(df)
+
+
+def insert_generic_data(df: pd.DataFrame, table_name: str) -> int:
+    """
+    Generic insert function for any table.
+    
+    Args:
+        df: DataFrame to insert
+        table_name: Name of the target table
+        
+    Returns:
+        Number of records inserted
+    """
+    db = get_db_connection()
+    
+    # Ensure date columns are datetime
+    df = df.copy()
+    for col in df.columns:
+        if 'date' in col.lower():
+            df[col] = pd.to_datetime(df[col], errors='ignore')
+    
+    db.insert_df(df, table_name, if_exists='append')
     
     return len(df)
 

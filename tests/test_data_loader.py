@@ -70,7 +70,7 @@ class TestDataLoader:
 
         assert 'S&P 500' in result
         assert not result['S&P 500'].empty
-        mock_download.assert_called_once_with('^GSPC', period='1y', progress=False)
+        mock_download.assert_called_once_with('^GSPC', period='1y', progress=False, auto_adjust=True)
 
     @patch('modules.data_loader._load_cached_data', return_value=None)
     @patch('modules.data_loader.yf.download')
