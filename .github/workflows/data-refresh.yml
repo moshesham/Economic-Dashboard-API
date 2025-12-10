@@ -17,9 +17,9 @@ on:
           - production
           - development
   
-  # Run on push to main or dev (for testing)
+  # Run on push to main (for testing)
   push:
-    branches: [ main, dev ]
+    branches: [ main ]
     paths:
       - 'scripts/refresh_data.py'
       - '.github/workflows/data-refresh.yml'

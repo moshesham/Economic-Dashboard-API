@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, dev ]
+    branches: [ main ]
 
 env:
   # Set environment based on branch
@@ -61,26 +61,6 @@ jobs:
         python -m py_compile modules/features/insider_trading_tracker.py
         python -m py_compile modules/features/financial_health_scorer.py
         python -m py_compile modules/features/sector_rotation_detector.py
-
-  deploy-dev:
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/dev' && github.event_name == 'push'
-    # Note: Create 'development' environment in repository settings if needed
-    # environment: development
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Deploy to Development Environment
-      env:
-        DASHBOARD_ENV: development
-      run: |
-        echo "🚀 Deploying to Development Environment"
-        echo "Branch: dev"
-        echo "Environment: development"
-        # Placeholder for dev deployment
-        # Add your dev deployment commands here
 
   deploy-prod:
     needs: test

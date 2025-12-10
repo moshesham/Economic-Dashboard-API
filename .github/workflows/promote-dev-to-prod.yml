@@ -1,6 +1,10 @@
-name: Promote Dev to Production
+# DISABLED - Dev branch does not exist
+# To use this workflow, create a 'dev' branch first
+name: Promote Dev to Production (DISABLED)
 
 on:
+  # Disabled - dev branch doesn't exist
+  # workflow_dispatch:
   workflow_dispatch:
     inputs:
       confirm_promotion:

@@ -1,8 +1,11 @@
-name: Sync Main to Dev
+# DISABLED - Dev branch does not exist  
+# To use this workflow, create a 'dev' branch first
+name: Sync Main to Dev (DISABLED)
 
 on:
-  push:
-    branches: [ main ]
+  # Disabled - dev branch doesn't exist
+  # push:
+  #   branches: [ main ]
   workflow_dispatch:
 
 jobs:
