@@ -3,6 +3,13 @@ US Economic Dashboard - Homepage
 Comprehensive view of US economic health and key indicators
 """
 
+import os
+import warnings
+
+# Suppress Streamlit warnings when running outside streamlit context
+os.environ['STREAMLIT_LOGGER_LEVEL'] = 'error'
+warnings.filterwarnings('ignore', message='.*missing ScriptRunContext.*')
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
