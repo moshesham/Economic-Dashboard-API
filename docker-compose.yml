@@ -5,6 +5,40 @@ version: '3.9'
 
 services:
   # ============================================================================
+  # PostgreSQL Database - Primary data storage
+  # ============================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: economic-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-economic_dashboard}
+      POSTGRES_USER: ${POSTGRES_USER:-dashboard_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dashboard_pass}
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dashboard_user} -d ${POSTGRES_DB:-economic_dashboard}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - economic-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ============================================================================
   # API Service - FastAPI REST endpoints
   # ============================================================================
   api:
@@ -22,6 +56,8 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - DATABASE_BACKEND=${DATABASE_BACKEND:-postgresql}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-dashboard_user}:${POSTGRES_PASSWORD:-dashboard_pass}@postgres:5432/${POSTGRES_DB:-economic_dashboard}
       - DUCKDB_PATH=/app/data/duckdb/economic_dashboard.duckdb
       - DUCKDB_READ_ONLY=true
       - REDIS_URL=redis://redis:6379/0
@@ -33,6 +69,8 @@ services:
       - cache_data:/app/data/cache:ro
       - ./logs:/app/logs
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
       worker:
@@ -66,6 +104,8 @@ services:
     container_name: economic-worker
     command: python -m services.scheduler
     environment:
+      - DATABASE_BACKEND=${DATABASE_BACKEND:-postgresql}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-dashboard_user}:${POSTGRES_PASSWORD:-dashboard_pass}@postgres:5432/${POSTGRES_DB:-economic_dashboard}
       - DUCKDB_PATH=/app/data/duckdb/economic_dashboard.duckdb
       - DUCKDB_READ_ONLY=false
       - REDIS_URL=redis://redis:6379/0
@@ -81,6 +121,8 @@ services:
       - backup_data:/app/data/backups:rw
       - ./logs:/app/logs
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
@@ -113,6 +155,8 @@ services:
     ports:
       - "8501:8501"
     environment:
+      - DATABASE_BACKEND=${DATABASE_BACKEND:-postgresql}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-dashboard_user}:${POSTGRES_PASSWORD:-dashboard_pass}@postgres:5432/${POSTGRES_DB:-economic_dashboard}
       - DUCKDB_PATH=/app/data/duckdb/economic_dashboard.duckdb
       - DUCKDB_READ_ONLY=true
       - API_BASE_URL=http://api:8000
@@ -170,6 +214,9 @@ networks:
 # Volumes - Persistent data storage
 # ============================================================================
 volumes:
+  postgres_data:
+    driver: local
+    name: economic-postgres-data
   duckdb_data:
     driver: local
     name: economic-duckdb-data

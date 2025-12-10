@@ -5,10 +5,15 @@ Provides singleton connection management for the Economic Dashboard database.
 """
 
 import duckdb
+import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 import pandas as pd
 from contextlib import contextmanager
+
+
+logger = logging.getLogger(__name__)
 
 
 class DatabaseConnection:
@@ -23,27 +28,90 @@ class DatabaseConnection:
         return cls._instance
     
     def __init__(self):
+        if not hasattr(self, "_db_path"):
+            self._db_path = Path(__file__).parent.parent.parent / 'data' / 'duckdb' / 'economic_dashboard.duckdb'
+        if not hasattr(self, "_temp_dir"):
+            self._temp_dir = Path(__file__).parent.parent.parent / 'data' / 'duckdb' / 'temp'
         if self._connection is None:
             self._connect()
     
     def _connect(self):
         """Establish connection to DuckDB database"""
-        db_path = Path(__file__).parent.parent.parent / 'data' / 'duckdb' / 'economic_dashboard.duckdb'
+        db_path = self._db_path
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Create temp directory
-        temp_dir = Path(__file__).parent.parent.parent / 'data' / 'duckdb' / 'temp'
+        temp_dir = self._temp_dir
         temp_dir.mkdir(parents=True, exist_ok=True)
-        
-        self._connection = duckdb.connect(str(db_path))
-        
-        # Configure DuckDB for optimal performance
+
+        db_existed = db_path.exists()
+
+        try:
+            self._connection = duckdb.connect(str(db_path))
+            self._configure_connection(temp_dir)
+
+            if not db_existed:
+                logger.info("DuckDB database not found. Initializing new schema at %s", db_path)
+                self._initialize_schema()
+
+        except duckdb.Error as exc:
+            if self._should_recover_database(exc, db_path):
+                self._recover_corrupt_database(db_path)
+                self._connection = duckdb.connect(str(db_path))
+                self._configure_connection(temp_dir)
+                self._initialize_schema()
+            else:
+                raise
+
+        # Note: DuckDB automatically optimizes queries and uses compression
+        # Additional optimizations are applied at export time via COPY TO PARQUET
+
+    def _configure_connection(self, temp_dir: Path) -> None:
+        """Apply consistent configuration settings to the DuckDB connection"""
         self._connection.execute("SET threads=4")
         self._connection.execute("SET memory_limit='2GB'")
         self._connection.execute(f"SET temp_directory='{temp_dir}'")
-        
-        # Note: DuckDB automatically optimizes queries and uses compression
-        # Additional optimizations are applied at export time via COPY TO PARQUET
+
+    @staticmethod
+    def _should_recover_database(exc: Exception, db_path: Path) -> bool:
+        """Determine if the database should be automatically recovered"""
+        corruption_markers = (
+            "Corrupt database file",
+            "checksum",
+            "IO Error"
+        )
+
+        return (
+            isinstance(exc, duckdb.IOException)
+            and db_path.exists()
+            and any(marker in str(exc) for marker in corruption_markers)
+        )
+
+    def _recover_corrupt_database(self, db_path: Path) -> None:
+        """Backup the corrupt database file and create a clean one"""
+        timestamp = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+        backup_name = f"{db_path.stem}.corrupt-{timestamp}{db_path.suffix}"
+        backup_path = db_path.with_name(backup_name)
+
+        try:
+            db_path.rename(backup_path)
+            logger.error(
+                "Corrupt DuckDB detected at %s. Backed up to %s before re-initializing.",
+                db_path,
+                backup_path
+            )
+        except OSError as rename_error:
+            logger.exception(
+                "Failed to backup corrupt DuckDB at %s. Manual intervention required.",
+                db_path
+            )
+            raise rename_error
+
+    def _initialize_schema(self) -> None:
+        """Create all necessary tables for a new database"""
+        from .schema import create_all_tables
+
+        create_all_tables()
         
     @property
     def connection(self) -> duckdb.DuckDBPyConnection:
