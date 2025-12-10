@@ -7,7 +7,7 @@ Uses Pandera for DataFrame validation.
 
 import pandas as pd
 import pandera.pandas as pa
-from pandera import Column, DataFrameSchema, Check
+from pandera.pandas import Column, DataFrameSchema, Check
 from typing import Optional, Dict, Any
 from datetime import datetime
 import logging

@@ -121,7 +121,7 @@ with DAG(
     # Task 1: Initialize database schema
     init_schema = PythonOperator(
         task_id='init_database_schema',
-        python_callable=lambda: __import__('modules.database.connection', fromlist=['init_database']).init_database(),
+        python_callable=lambda: __import__('modules.database', fromlist=['get_db_connection']).get_db_connection(),
     )
     
     # Task 2: Refresh ICI ETF flows data

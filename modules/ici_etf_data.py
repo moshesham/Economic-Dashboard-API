@@ -184,7 +184,7 @@ def save_ici_etf_flows_to_duckdb(weekly_df: Optional[pd.DataFrame] = None,
     Returns:
         Dictionary with counts of records saved
     """
-    from modules.database.connection import get_db_connection
+    from modules.database import get_db_connection
     from modules.database.queries import log_data_refresh
     
     results = {'weekly_records': 0, 'monthly_records': 0}
@@ -247,7 +247,7 @@ def get_latest_etf_flows(fund_type: Optional[str] = None,
     Returns:
         DataFrame with ETF flow data
     """
-    from modules.database.connection import get_db_connection
+    from modules.database import get_db_connection
     
     db = get_db_connection()
     

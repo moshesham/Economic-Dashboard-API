@@ -171,7 +171,7 @@ def save_cboe_vix_to_duckdb(vix_df: Optional[pd.DataFrame] = None) -> dict:
     Returns:
         Dictionary with count of records saved
     """
-    from modules.database.connection import get_db_connection
+    from modules.database import get_db_connection
     from modules.database.queries import log_data_refresh
     
     results = {'vix_records': 0}
@@ -221,7 +221,7 @@ def get_vix_history(start_date: Optional[str] = None,
     Returns:
         DataFrame with VIX history
     """
-    from modules.database.connection import get_db_connection
+    from modules.database import get_db_connection
     
     db = get_db_connection()
     
@@ -250,7 +250,7 @@ def get_latest_vix_value() -> Optional[float]:
     Returns:
         Latest VIX close value or None if no data
     """
-    from modules.database.connection import get_db_connection
+    from modules.database import get_db_connection
     
     db = get_db_connection()
     
@@ -272,7 +272,7 @@ def calculate_vix_statistics(days: int = 252) -> dict:
     Returns:
         Dictionary with VIX statistics
     """
-    from modules.database.connection import get_db_connection
+    from modules.database import get_db_connection
     
     db = get_db_connection()
     
@@ -320,7 +320,7 @@ def calculate_vix_percentile(current_vix: Optional[float] = None,
     Returns:
         Percentile rank (0-100) or None if insufficient data
     """
-    from modules.database.connection import get_db_connection
+    from modules.database import get_db_connection
     
     if current_vix is None:
         current_vix = get_latest_vix_value()

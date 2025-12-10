@@ -172,7 +172,7 @@ class PostgreSQLBackend:
         self.connection_url = connection_url or self._build_connection_url()
         
         # Create connection pool for better performance
-        self._pool = pool.SimpleConnectionPool(
+        self._pool = pool.ThreadedConnectionPool(
             minconn=1,
             maxconn=10,
             dsn=self.connection_url

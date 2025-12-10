@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 
-from modules.database.connection import DatabaseConnection
+from modules.database.factory import DatabaseConnection
 from modules.features.leverage_metrics import LeverageMetricsCalculator
 from modules.features.margin_risk_composite import MarginCallRiskCalculator
 

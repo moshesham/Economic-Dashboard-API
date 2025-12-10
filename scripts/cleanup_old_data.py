@@ -16,7 +16,6 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from modules.database import get_db_connection
-from modules.database.schema import create_data_retention_policy_table
 
 
 # Default retention policies (in days)
@@ -51,8 +50,7 @@ DEFAULT_RETENTION_POLICIES = {
 
 def initialize_retention_policies():
     """Initialize data_retention_policy table with default policies."""
-    # Ensure table exists
-    create_data_retention_policy_table()
+    # Ensure table exists - handled by init_database
     
     db = get_db_connection()
     
