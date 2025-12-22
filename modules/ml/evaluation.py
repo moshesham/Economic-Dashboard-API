@@ -5,12 +5,12 @@ Provides comprehensive evaluation metrics and performance analysis for ML models
 Includes financial metrics and prediction quality assessment.
 """
 
-import duckdb
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Any
 import logging
+import os
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
     roc_auc_score, roc_curve, confusion_matrix, classification_report,
@@ -25,6 +25,9 @@ except ImportError:
     PLOTTING_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
+
+
+from modules.database.factory import get_db_connection
 
 
 class ModelEvaluator:
@@ -46,7 +49,10 @@ class ModelEvaluator:
         Args:
             db_path: Path to DuckDB database
         """
+        # Backwards-compat: callers may pass a DuckDB path.
         self.db_path = db_path
+        if os.getenv('DATABASE_BACKEND', 'duckdb').lower() == 'duckdb' and not os.getenv('DUCKDB_PATH'):
+            os.environ['DUCKDB_PATH'] = db_path
         
     def evaluate_predictions(
         self,
@@ -203,11 +209,10 @@ class ModelEvaluator:
         Returns:
             Dictionary with comprehensive evaluation results
         """
-        conn = duckdb.connect(self.db_path, read_only=True)
-        
-        try:
-            # Get predictions and actual outcomes
-            query = f"""
+        db = get_db_connection()
+
+        # Get predictions and actual outcomes
+        query = f"""
             WITH predictions AS (
                 SELECT
                     p.ticker,
@@ -245,65 +250,61 @@ class ModelEvaluator:
             )
             SELECT * FROM combined
             """
-            
-            if start_date:
-                query += f" WHERE prediction_date >= '{start_date}'"
-            if end_date:
-                conjunction = "AND" if start_date else "WHERE"
-                query += f" {conjunction} prediction_date <= '{end_date}'"
-            
-            query += " ORDER BY prediction_date"
-            
-            df = conn.execute(query).df()
-            
-            if df.empty:
-                raise ValueError(f"No predictions found for {ticker} ({prediction_type})")
-            
-            # Calculate classification metrics
-            y_true = df['actual_outcome'].values
-            y_pred = df['prediction'].values
-            y_proba = df[['probability_down', 'probability_up']].values
-            
-            classification_metrics = self.evaluate_predictions(y_true, y_pred, y_proba)
-            
-            # Get confusion matrix
-            cm, cm_dict = self.get_confusion_matrix(y_true, y_pred)
-            
-            # Calculate financial metrics
-            financial_metrics = self.calculate_financial_metrics(
-                df[['prediction']],
-                df['actual_return']
-            )
-            
-            # Prediction quality over time
-            df['correct'] = (df['prediction'] == df['actual_outcome']).astype(int)
-            
-            # Rolling accuracy (30-day window)
-            if len(df) >= 30:
-                df['rolling_accuracy'] = df['correct'].rolling(window=30, min_periods=10).mean()
-            
-            results = {
-                'ticker': ticker,
-                'prediction_type': prediction_type,
-                'evaluation_period': {
-                    'start': df['prediction_date'].min().isoformat() if hasattr(df['prediction_date'].min(), 'isoformat') else str(df['prediction_date'].min()),
-                    'end': df['prediction_date'].max().isoformat() if hasattr(df['prediction_date'].max(), 'isoformat') else str(df['prediction_date'].max()),
-                    'num_predictions': len(df)
-                },
-                'classification_metrics': classification_metrics,
-                'confusion_matrix': cm_dict,
-                'financial_metrics': financial_metrics,
-                'predictions_df': df
-            }
-            
-            logger.info(f"Evaluation for {ticker}: Accuracy={classification_metrics['accuracy']:.2%}, "
-                       f"Win Rate={financial_metrics['win_rate']:.2%}, "
-                       f"Sharpe={financial_metrics['sharpe_ratio']:.2f}")
-            
-            return results
-            
-        finally:
-            conn.close()
+
+        if start_date:
+            query += f" WHERE prediction_date >= '{start_date}'"
+        if end_date:
+            conjunction = "AND" if start_date else "WHERE"
+            query += f" {conjunction} prediction_date <= '{end_date}'"
+
+        query += " ORDER BY prediction_date"
+
+        df = db.query(query)
+        if df.empty:
+            raise ValueError(f"No predictions found for {ticker} ({prediction_type})")
+
+        # Calculate classification metrics
+        y_true = df['actual_outcome'].values
+        y_pred = df['prediction'].values
+        y_proba = df[['probability_down', 'probability_up']].values
+
+        classification_metrics = self.evaluate_predictions(y_true, y_pred, y_proba)
+
+        # Get confusion matrix
+        _, cm_dict = self.get_confusion_matrix(y_true, y_pred)
+
+        # Calculate financial metrics
+        financial_metrics = self.calculate_financial_metrics(
+            df[['prediction']],
+            df['actual_return']
+        )
+
+        # Prediction quality over time
+        df['correct'] = (df['prediction'] == df['actual_outcome']).astype(int)
+
+        # Rolling accuracy (30-day window)
+        if len(df) >= 30:
+            df['rolling_accuracy'] = df['correct'].rolling(window=30, min_periods=10).mean()
+
+        results = {
+            'ticker': ticker,
+            'prediction_type': prediction_type,
+            'evaluation_period': {
+                'start': df['prediction_date'].min().isoformat() if hasattr(df['prediction_date'].min(), 'isoformat') else str(df['prediction_date'].min()),
+                'end': df['prediction_date'].max().isoformat() if hasattr(df['prediction_date'].max(), 'isoformat') else str(df['prediction_date'].max()),
+                'num_predictions': len(df)
+            },
+            'classification_metrics': classification_metrics,
+            'confusion_matrix': cm_dict,
+            'financial_metrics': financial_metrics,
+            'predictions_df': df
+        }
+
+        logger.info(f"Evaluation for {ticker}: Accuracy={classification_metrics['accuracy']:.2%}, "
+                   f"Win Rate={financial_metrics['win_rate']:.2%}, "
+                   f"Sharpe={financial_metrics['sharpe_ratio']:.2f}")
+
+        return results
     
     def generate_classification_report(
         self,

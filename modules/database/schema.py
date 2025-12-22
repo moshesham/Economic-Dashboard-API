@@ -4,7 +4,30 @@ Database Schema Definitions
 Defines all tables for the Economic Dashboard DuckDB database.
 """
 
-from .connection import get_db_connection
+# Module-level variable to store reference to db during schema creation
+# This avoids circular import issues
+_schema_db = None
+
+
+def get_db_connection():
+    """Get database connection, avoiding circular imports during initialization."""
+    global _schema_db
+    if _schema_db is not None:
+        return _schema_db
+    from .factory import get_db_connection as factory_get_db
+    return factory_get_db()
+
+
+def set_schema_db(db):
+    """Set the database connection for schema creation (used by factory during init)."""
+    global _schema_db
+    _schema_db = db
+
+
+def clear_schema_db():
+    """Clear the schema db after initialization is complete."""
+    global _schema_db
+    _schema_db = None
 
 
 def create_fred_data_table():
@@ -760,92 +783,92 @@ def create_all_tables():
     print("Creating database schema...")
     
     create_fred_data_table()
-    print("✓ Created fred_data table")
+    print("[OK] Created fred_data table")
     
     create_yfinance_ohlcv_table()
-    print("✓ Created yfinance_ohlcv table")
+    print("[OK] Created yfinance_ohlcv table")
     
     create_options_data_table()
-    print("✓ Created options_data table")
+    print("[OK] Created options_data table")
 
     create_ici_etf_weekly_flows_table()
-    print("✓ Created ici_etf_weekly_flows table")
+    print("[OK] Created ici_etf_weekly_flows table")
 
     create_ici_etf_flows_table()
-    print("✓ Created ici_etf_flows table")
+    print("[OK] Created ici_etf_flows table")
     
     create_market_indicators_table()
-    print("✓ Created market_indicators table")
+    print("[OK] Created market_indicators table")
 
     create_cboe_vix_history_table()
-    print("✓ Created cboe_vix_history table")
+    print("[OK] Created cboe_vix_history table")
 
     create_cboe_vix_term_structure_table()
-    print("✓ Created cboe_vix_term_structure table")
+    print("[OK] Created cboe_vix_term_structure table")
     
     create_technical_features_table()
-    print("✓ Created technical_features table")
+    print("[OK] Created technical_features table")
     
     create_derived_features_table()
-    print("✓ Created derived_features table")
+    print("[OK] Created derived_features table")
     
     create_ml_training_data_table()
-    print("✓ Created ml_training_data table")
+    print("[OK] Created ml_training_data table")
     
     create_ml_predictions_table()
-    print("✓ Created ml_predictions table")
+    print("[OK] Created ml_predictions table")
     
     create_model_performance_table()
-    print("✓ Created model_performance table")
+    print("[OK] Created model_performance table")
     
     create_data_refresh_log_table()
-    print("✓ Created data_refresh_log table")
+    print("[OK] Created data_refresh_log table")
     
     create_data_retention_policy_table()
-    print("✓ Created data_retention_policy table")
+    print("[OK] Created data_retention_policy table")
     
     create_feature_drift_table()
-    print("✓ Created feature_drift table")
+    print("[OK] Created feature_drift table")
     
     # Margin Call Risk Tables
     create_leverage_metrics_table()
-    print("✓ Created leverage_metrics table")
+    print("[OK] Created leverage_metrics table")
     
     create_vix_term_structure_table()
-    print("✓ Created vix_term_structure table")
+    print("[OK] Created vix_term_structure table")
     
     create_leveraged_etf_data_table()
-    print("✓ Created leveraged_etf_data table")
+    print("[OK] Created leveraged_etf_data table")
     
     create_margin_call_risk_table()
-    print("✓ Created margin_call_risk table")
+    print("[OK] Created margin_call_risk table")
     
     # SEC Data Tables
     create_sec_submissions_table()
-    print("✓ Created sec_submissions table")
+    print("[OK] Created sec_submissions table")
     
     create_sec_financial_statements_table()
-    print("✓ Created sec_financial_statements table")
+    print("[OK] Created sec_financial_statements table")
     
     create_sec_company_facts_table()
-    print("✓ Created sec_company_facts table")
+    print("[OK] Created sec_company_facts table")
     
     create_sec_filings_table()
-    print("✓ Created sec_filings table")
+    print("[OK] Created sec_filings table")
     
     create_sec_fails_to_deliver_table()
-    print("✓ Created sec_fails_to_deliver table")
+    print("[OK] Created sec_fails_to_deliver table")
     
     create_sec_13f_holdings_table()
-    print("✓ Created sec_13f_holdings table")
+    print("[OK] Created sec_13f_holdings table")
     create_news_sentiment_table()
-    print("✓ Created news_sentiment table")
+    print("[OK] Created news_sentiment table")
     
     create_sentiment_summary_table()
-    print("✓ Created sentiment_summary table")
+    print("[OK] Created sentiment_summary table")
     
     create_google_trends_table()
-    print("✓ Created google_trends table")
+    print("[OK] Created google_trends table")
     
     print("\nDatabase schema created successfully!")
 
@@ -886,6 +909,6 @@ def drop_all_tables():
     
     for table in tables:
         db.execute(f"DROP TABLE IF EXISTS {table}")
-        print(f"✓ Dropped {table}")
+        print(f"[OK] Dropped {table}")
     
     print("\nAll tables dropped!")

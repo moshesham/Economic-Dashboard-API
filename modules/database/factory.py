@@ -113,8 +113,13 @@ class DuckDBBackend:
     
     def _initialize_schema(self) -> None:
         """Create all necessary tables for a new database."""
-        from .schema import create_all_tables
-        create_all_tables()
+        from .schema import create_all_tables, set_schema_db, clear_schema_db
+        # Set the db reference before calling create_all_tables to avoid circular imports
+        set_schema_db(self)
+        try:
+            create_all_tables()
+        finally:
+            clear_schema_db()
     
     def query(self, sql: str, params: Optional[tuple] = None) -> pd.DataFrame:
         """Execute a SELECT query and return results as DataFrame."""
@@ -135,7 +140,9 @@ class DuckDBBackend:
         self._connection.register('temp_df', df)
         
         if if_exists == 'replace':
-            self.execute(f"DELETE FROM {table_name}")
+            # Drop and recreate table for replace mode
+            self.execute(f"DROP TABLE IF EXISTS {table_name}")
+            self.execute(f"CREATE TABLE {table_name} AS SELECT * FROM temp_df WHERE 1=0")
         
         columns = ', '.join(df.columns)
         self.execute(f"INSERT INTO {table_name} ({columns}) SELECT {columns} FROM temp_df")
@@ -370,20 +377,6 @@ def close_db_connection() -> None:
     if _db_connection:
         _db_connection.close()
         _db_connection = None
-
-
-# Module-level singleton
-_db = DatabaseConnection()
-
-
-def get_db_connection() -> DatabaseConnection:
-    """Get the singleton database connection."""
-    return _db
-
-
-def close_db_connection():
-    """Close the database connection."""
-    _db.close()
 
 
 def init_database():

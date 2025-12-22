@@ -1,0 +1,288 @@
+name: Deploy Docker Containers
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      services:
+        description: 'Services to deploy (comma-separated: api,worker,dashboard or "all")'
+        required: false
+        default: 'all'
+  
+  # Auto-deploy on successful Docker image build
+  workflow_run:
+    workflows: ["CD - Docker Build & Push"]
+    types:
+      - completed
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Only deploy if the Docker build succeeded
+    if: |
+      github.event_name == 'workflow_dispatch' || 
+      github.event.workflow_run.conclusion == 'success'
+    
+    environment:
+      name: ${{ github.event.inputs.environment || 'staging' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set deployment variables
+        id: vars
+        run: |
+          # Determine environment
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+            SERVICES="${{ github.event.inputs.services }}"
+          else
+            ENV="staging"
+            SERVICES="all"
+          fi
+          
+          echo "environment=${ENV}" >> $GITHUB_OUTPUT
+          echo "services=${SERVICES}" >> $GITHUB_OUTPUT
+          
+          # Set image tag
+          IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "image_name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+          echo "image_tag=latest" >> $GITHUB_OUTPUT
+          
+          echo "📦 Deploying to: ${ENV}"
+          echo "🎯 Services: ${SERVICES}"
+      
+      - name: Validate deployment credentials
+        id: validate
+        run: |
+          # Check if deployment secrets are configured
+          if [ -z "${{ secrets.DEPLOY_HOST }}" ]; then
+            echo "available=false" >> $GITHUB_OUTPUT
+            echo "::warning::DEPLOY_HOST secret not configured - using local deployment"
+          else
+            echo "available=true" >> $GITHUB_OUTPUT
+          fi
+      
+      # ========================================================================
+      # Remote Deployment (SSH to server)
+      # ========================================================================
+      - name: Deploy to remote server via SSH
+        if: steps.validate.outputs.available == 'true'
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/opt/economic-dashboard' }}
+          REGISTRY: ghcr.io
+          IMAGE_NAME: ${{ steps.vars.outputs.image_name }}
+          IMAGE_TAG: ${{ steps.vars.outputs.image_tag }}
+          SERVICES: ${{ steps.vars.outputs.services }}
+          ENV_NAME: ${{ steps.vars.outputs.environment }}
+        run: |
+          # Setup SSH
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+          
+          # Create deployment script
+          cat > deploy.sh << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          echo "🚀 Starting deployment to ${ENV_NAME}..."
+          
+          # Navigate to deployment directory
+          cd ${DEPLOY_PATH}
+          
+          # Login to container registry
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          
+          # Pull latest images
+          if [ "$SERVICES" = "all" ]; then
+            echo "📥 Pulling all service images..."
+            docker compose pull
+          else
+            IFS=',' read -ra SVC_ARRAY <<< "$SERVICES"
+            for service in "${SVC_ARRAY[@]}"; do
+              echo "📥 Pulling ${service} image..."
+              docker compose pull ${service}
+            done
+          fi
+          
+          # Stop and remove old containers
+          if [ "$SERVICES" = "all" ]; then
+            docker compose down
+          else
+            IFS=',' read -ra SVC_ARRAY <<< "$SERVICES"
+            for service in "${SVC_ARRAY[@]}"; do
+              docker compose stop ${service}
+              docker compose rm -f ${service}
+            done
+          fi
+          
+          # Start services
+          if [ "$SERVICES" = "all" ]; then
+            echo "🚀 Starting all services..."
+            docker compose up -d
+          else
+            IFS=',' read -ra SVC_ARRAY <<< "$SERVICES"
+            for service in "${SVC_ARRAY[@]}"; do
+              echo "🚀 Starting ${service}..."
+              docker compose up -d ${service}
+            done
+          fi
+          
+          # Wait for services to be healthy
+          echo "⏳ Waiting for services to be healthy..."
+          sleep 10
+          
+          # Show status
+          docker compose ps
+          
+          echo "✅ Deployment complete!"
+          EOF
+          
+          # Copy deployment files to server
+          scp -i ~/.ssh/deploy_key docker-compose.yml ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/
+          scp -i ~/.ssh/deploy_key .env.example ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/.env
+          scp -i ~/.ssh/deploy_key deploy.sh ${DEPLOY_USER}@${DEPLOY_HOST}:${DEPLOY_PATH}/
+          
+          # Execute deployment
+          ssh -i ~/.ssh/deploy_key ${DEPLOY_USER}@${DEPLOY_HOST} "bash ${DEPLOY_PATH}/deploy.sh"
+          
+          # Cleanup
+          rm ~/.ssh/deploy_key
+      
+      # ========================================================================
+      # Local/Testing Deployment (Docker Compose locally)
+      # ========================================================================
+      - name: Deploy locally (testing mode)
+        if: steps.validate.outputs.available == 'false'
+        env:
+          REGISTRY: ghcr.io
+          IMAGE_NAME: ${{ steps.vars.outputs.image_name }}
+          IMAGE_TAG: ${{ steps.vars.outputs.image_tag }}
+        run: |
+          echo "🧪 Running local deployment test..."
+          
+          # Login to container registry
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          
+          # Pull images
+          docker compose pull postgres redis
+          
+          # Start infrastructure services only (for testing)
+          docker compose up -d postgres redis
+          
+          # Wait for services
+          sleep 5
+          
+          # Show status
+          docker compose ps
+          
+          echo "✅ Local test deployment complete!"
+          echo "::notice::To enable remote deployment, configure DEPLOY_HOST, DEPLOY_USER, and DEPLOY_SSH_KEY secrets"
+      
+      # ========================================================================
+      # Health Checks
+      # ========================================================================
+      - name: Run health checks
+        if: steps.validate.outputs.available == 'true'
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          API_PORT: ${{ secrets.API_PORT || '8000' }}
+        run: |
+          echo "🔍 Running health checks..."
+          
+          # Wait for API to be ready
+          for i in {1..30}; do
+            if curl -f http://${DEPLOY_HOST}:${API_PORT}/health > /dev/null 2>&1; then
+              echo "✅ API health check passed!"
+              break
+            fi
+            echo "Waiting for API... (attempt $i/30)"
+            sleep 2
+          done
+          
+          # Get health status
+          curl -s http://${DEPLOY_HOST}:${API_PORT}/health | jq '.' || echo "Health check endpoint not available"
+      
+      # ========================================================================
+      # Deployment Summary
+      # ========================================================================
+      - name: Create deployment summary
+        if: always()
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${{ steps.vars.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Services:** ${{ steps.vars.outputs.services }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image:** ghcr.io/${{ steps.vars.outputs.image_name }}:${{ steps.vars.outputs.image_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.validate.outputs.available }}" = "true" ]; then
+            echo "### 🌐 Deployment URLs" >> $GITHUB_STEP_SUMMARY
+            echo "- API: http://${{ secrets.DEPLOY_HOST }}:${{ secrets.API_PORT || '8000' }}" >> $GITHUB_STEP_SUMMARY
+            echo "- Dashboard: http://${{ secrets.DEPLOY_HOST }}:${{ secrets.DASHBOARD_PORT || '8501' }}" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ℹ️ Local Test Mode" >> $GITHUB_STEP_SUMMARY
+            echo "Configure deployment secrets to enable remote deployment." >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Deployment failed! Check the logs for details."
+
+  # ============================================================================
+  # Rollback (Manual trigger only)
+  # Note: Run this job manually if deployment fails
+  # ============================================================================
+  # rollback:
+  #   runs-on: ubuntu-latest
+  #   if: false  # Disabled - enable manually when needed
+  #   needs: deploy
+  #   
+  #   steps:
+  #     - name: Rollback deployment
+  #       env:
+  #         DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+  #         DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+  #         DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+  #         DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/opt/economic-dashboard' }}
+  #       run: |
+  #         echo "⚠️ Rolling back deployment..."
+  #         
+  #         # Setup SSH
+  #         mkdir -p ~/.ssh
+  #         echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+  #         chmod 600 ~/.ssh/deploy_key
+  #         ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+  #         
+  #         # Execute rollback
+  #         ssh -i ~/.ssh/deploy_key ${DEPLOY_USER}@${DEPLOY_HOST} << 'ENDSSH'
+  #         cd ${DEPLOY_PATH}
+  #         docker compose down
+  #         # Pull previous version (if tagged)
+  #         # docker compose pull --tag previous
+  #         docker compose up -d
+  #         ENDSSH
+  #         
+  #         rm ~/.ssh/deploy_key
+  #         echo "✅ Rollback complete!"

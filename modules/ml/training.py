@@ -5,9 +5,9 @@ Provides model training functionality with walk-forward validation for time seri
 Includes hyperparameter tuning and comprehensive training pipeline.
 """
 
-import duckdb
 import pandas as pd
 import numpy as np
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
@@ -17,6 +17,8 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 import json
 
 from .models import XGBoostModel, LightGBMModel, EnsembleModel
+from .feature_engineering import FeatureEngineer
+from modules.database.factory import get_db_connection
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +47,10 @@ class ModelTrainer:
             db_path: Path to DuckDB database
             models_dir: Directory to save trained models
         """
+        # Backwards-compat: callers may pass a DuckDB path.
         self.db_path = db_path
+        if os.getenv('DATABASE_BACKEND', 'duckdb').lower() == 'duckdb' and not os.getenv('DUCKDB_PATH'):
+            os.environ['DUCKDB_PATH'] = db_path
         self.models_dir = Path(models_dir)
         self.models_dir.mkdir(parents=True, exist_ok=True)
         
@@ -72,80 +77,56 @@ class ModelTrainer:
         Returns:
             Tuple of (features DataFrame, target Series)
         """
-        conn = duckdb.connect(self.db_path, read_only=True)
-        
-        try:
-            # Build query to join all feature tables
-            query = f"""
-            WITH price_data AS (
-                SELECT 
-                    date,
-                    ticker,
-                    close,
-                    LEAD(close, {prediction_horizon}) OVER (
-                        PARTITION BY ticker ORDER BY date
-                    ) AS future_close
-                FROM yfinance_ohlcv
-                WHERE ticker = '{ticker}'
-            ),
-            combined_features AS (
-                SELECT 
-                    p.date,
-                    p.ticker,
-                    p.close,
-                    p.future_close,
-                    t.*,
-                    d.*,
-                    o.pcr_volume,
-                    o.pcr_open_interest,
-                    o.iv_rank,
-                    o.iv_percentile,
-                    o.iv_skew
-                FROM price_data p
-                LEFT JOIN technical_features t 
-                    ON p.ticker = t.ticker AND p.date = t.date
-                LEFT JOIN derived_features d
-                    ON p.ticker = d.ticker AND p.date = d.date
-                LEFT JOIN options_data o
-                    ON p.ticker = o.ticker AND p.date = o.date
-                WHERE p.future_close IS NOT NULL
-            )
-            SELECT * FROM combined_features
-            """
-            
-            if start_date:
-                query += f" AND date >= '{start_date}'"
-            if end_date:
-                query += f" AND date <= '{end_date}'"
-                
-            query += " ORDER BY date"
-            
-            df = conn.execute(query).df()
-            
-            if df.empty:
-                raise ValueError(f"No training data found for {ticker}")
-            
-            # Create binary target: 1 if price goes up, 0 if down
-            df['target'] = (df['future_close'] > df['close']).astype(int)
-            
-            # Drop non-feature columns
-            feature_cols = df.columns.difference([
-                'date', 'ticker', 'close', 'future_close', 'target'
-            ])
-            
-            X = df[feature_cols].copy()
-            y = df['target'].copy()
-            
-            # Handle missing values
-            X = X.fillna(X.median())
-            
-            logger.info(f"Prepared {len(X)} samples with {len(feature_cols)} features for {ticker}")
-            logger.info(f"Target distribution: {y.value_counts().to_dict()}")
-            
-            return X, y
-            
-        finally:
-            conn.close()
+        db = get_db_connection()
+
+        query = f"""
+        SELECT date, open, high, low, close, volume, adj_close
+        FROM yfinance_ohlcv
+        WHERE ticker = '{ticker}'
+        """
+        if start_date:
+            query += f" AND date >= '{start_date}'"
+        if end_date:
+            query += f" AND date <= '{end_date}'"
+        query += " ORDER BY date"
+
+        df = db.query(query)
+        if df.empty:
+            raise ValueError(f"No OHLCV data found for {ticker} in yfinance_ohlcv")
+
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values('date').set_index('date')
+
+        # Ensure required numeric columns exist
+        for col in ['open', 'high', 'low', 'close', 'volume']:
+            if col not in df.columns:
+                raise ValueError(f"Missing column '{col}' in yfinance_ohlcv for {ticker}")
+
+        df['future_close'] = df['close'].shift(-prediction_horizon)
+        df = df.dropna(subset=['future_close'])
+
+        y = (df['future_close'] > df['close']).astype(int)
+
+        # Generate features from OHLCV (works for both DuckDB and PostgreSQL backends)
+        ohlcv = df[['open', 'high', 'low', 'close', 'volume']].copy()
+        engineer = FeatureEngineer()
+        X = engineer.generate_all_features(ohlcv)
+
+        # Basic cleanup: drop rows with any NA in target alignment, then fill remaining NAs in features
+        X = X.replace([np.inf, -np.inf], np.nan)
+        X = X.loc[y.index]
+
+        # Remove rows where features are entirely missing (early rolling windows)
+        valid_mask = X.notna().any(axis=1)
+        X = X.loc[valid_mask]
+        y = y.loc[valid_mask]
+
+        X = X.fillna(X.median(numeric_only=True))
+
+        logger.info(f"Prepared {len(X)} samples with {X.shape[1]} features for {ticker}")
+        logger.info(f"Target distribution: {y.value_counts().to_dict()}")
+
+        return X, y
     
     def walk_forward_validation(
         self,
@@ -202,7 +183,7 @@ class ModelTrainer:
                 raise ValueError(f"Unknown model type: {model_type}")
             
             # Train model
-            model.fit(X_train, y_train, X_val, y_val)
+            model.fit(X_train, y_train, eval_set=[(X_val, y_val)])
             
             # Evaluate on validation set
             y_pred = model.predict(X_val)

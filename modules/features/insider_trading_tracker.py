@@ -34,10 +34,6 @@ except ImportError:
 
 try:
     from modules.database import get_db_connection
-    DB_AVAILABLE = True
-except ImportError:
-    DB_AVAILABLE = False
-    from modules.database import get_db_connection
     from modules.sec_data_loader import get_company_submissions, lookup_cik, _download_with_retry, SEC_DATA_HEADERS, SEC_BASE_URL
     DB_AVAILABLE = True
 except ImportError:
