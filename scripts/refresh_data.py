@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pandas_datareader import data as pdr
 import yfinance as yf
-from config_settings import ensure_cache_dir, get_cache_dir
+from core.config import ensure_cache_dir, get_cache_dir
 
 
 # All FRED series used across the dashboard

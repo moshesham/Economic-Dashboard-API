@@ -65,7 +65,7 @@ def test_offline_mode():
     config_module = None
     try:
         # Reload config to pick up environment variable
-        import config_settings as config
+        from core import config
         config_module = importlib.reload(config)
 
         if not config_module.is_offline_mode():

@@ -575,6 +575,291 @@ class SECCompanyFacts(Base):
 
 
 # =============================================================================
+# SEC Additional Tables
+# =============================================================================
+
+class SECFilings(Base):
+    """SEC filings data"""
+    __tablename__ = 'sec_filings'
+
+    cik = Column(String, nullable=False)
+    filing_date = Column(Date, nullable=False)
+    form_type = Column(String)
+    accession_number = Column(String)
+    file_number = Column(String)
+    film_number = Column(String)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('cik', 'filing_date', 'accession_number'),
+        Index('idx_sec_filings_cik', 'cik'),
+        Index('idx_sec_filings_date', 'filing_date'),
+        Index('idx_sec_filings_form', 'form_type'),
+    )
+
+
+class SECFailsToDeliver(Base):
+    """SEC fails to deliver data"""
+    __tablename__ = 'sec_fails_to_deliver'
+
+    cusip = Column(String, nullable=False)
+    settlement_date = Column(Date, nullable=False)
+    symbol = Column(String)
+    quantity = Column(BigInteger)
+    description = Column(String)
+    price = Column(Float)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('cusip', 'settlement_date'),
+        Index('idx_sec_ftd_cusip', 'cusip'),
+        Index('idx_sec_ftd_date', 'settlement_date'),
+        Index('idx_sec_ftd_symbol', 'symbol'),
+    )
+
+
+class SEC13FHoldings(Base):
+    """SEC 13F holdings data"""
+    __tablename__ = 'sec_13f_holdings'
+
+    cik = Column(String, nullable=False)
+    filing_date = Column(Date, nullable=False)
+    cusip = Column(String, nullable=False)
+    security_name = Column(String)
+    shares = Column(BigInteger)
+    market_value = Column(BigInteger)
+    put_call = Column(String)
+    investment_discretion = Column(String)
+    voting_authority_sole = Column(BigInteger)
+    voting_authority_shared = Column(BigInteger)
+    voting_authority_none = Column(BigInteger)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('cik', 'filing_date', 'cusip'),
+        Index('idx_sec_13f_cik', 'cik'),
+        Index('idx_sec_13f_filing_date', 'filing_date'),
+        Index('idx_sec_13f_cusip', 'cusip'),
+    )
+
+
+# =============================================================================
+# Margin Call Risk Tables
+# =============================================================================
+
+class LeverageMetrics(Base):
+    """Leverage and margin metrics"""
+    __tablename__ = 'leverage_metrics'
+
+    ticker = Column(String, nullable=False)
+    date = Column(Date, nullable=False)
+    short_interest = Column(BigInteger)
+    short_interest_ratio = Column(Float)
+    days_to_cover = Column(Float)
+    short_percent_float = Column(Float)
+    shares_outstanding = Column(BigInteger)
+    float_shares = Column(BigInteger)
+    avg_volume_10d = Column(BigInteger)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('ticker', 'date'),
+        Index('idx_leverage_ticker', 'ticker'),
+        Index('idx_leverage_date', 'date'),
+    )
+
+
+class VIXTermStructure(Base):
+    """VIX and volatility term structure"""
+    __tablename__ = 'vix_term_structure'
+
+    date = Column(Date, primary_key=True, nullable=False)
+    vix = Column(Float)
+    vix_3m = Column(Float)
+    vix_6m = Column(Float)
+    vvix = Column(Float)
+    vix_term_spread = Column(Float)
+    vix_regime = Column(String)
+    backwardation_ratio = Column(Float)
+    stress_score = Column(Float)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        Index('idx_vix_date', 'date'),
+        Index('idx_vix_regime', 'vix_regime'),
+    )
+
+
+class LeveragedETFData(Base):
+    """Leveraged ETF tracking"""
+    __tablename__ = 'leveraged_etf_data'
+
+    ticker = Column(String, nullable=False)
+    date = Column(Date, nullable=False)
+    close = Column(Float)
+    volume = Column(BigInteger)
+    volume_ratio = Column(Float)
+    intraday_volatility = Column(Float)
+    tracking_error = Column(Float)
+    premium_discount = Column(Float)
+    stress_indicator = Column(Float)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('ticker', 'date'),
+        Index('idx_lev_etf_ticker', 'ticker'),
+        Index('idx_lev_etf_date', 'date'),
+    )
+
+
+class MarginCallRisk(Base):
+    """Composite margin call risk scores"""
+    __tablename__ = 'margin_call_risk'
+
+    ticker = Column(String, nullable=False)
+    date = Column(Date, nullable=False)
+    leverage_score = Column(Float)
+    volatility_score = Column(Float)
+    options_score = Column(Float)
+    liquidity_score = Column(Float)
+    composite_risk_score = Column(Float)
+    risk_level = Column(String)
+    vix_regime = Column(String)
+    short_interest_pct = Column(Float)
+    put_call_ratio = Column(Float)
+    iv_rank = Column(Float)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('ticker', 'date'),
+        Index('idx_margin_risk_ticker', 'ticker'),
+        Index('idx_margin_risk_date', 'date'),
+        Index('idx_margin_risk_level', 'risk_level'),
+        Index('idx_margin_composite', 'composite_risk_score'),
+    )
+
+
+# =============================================================================
+# Sentiment Tables (Additional)
+# =============================================================================
+
+class SentimentSummary(Base):
+    """Aggregated sentiment summaries"""
+    __tablename__ = 'sentiment_summary'
+
+    ticker = Column(String, nullable=False)
+    analysis_date = Column(Date, nullable=False)
+    article_count = Column(Integer)
+    avg_sentiment = Column(Float)
+    median_sentiment = Column(Float)
+    positive_count = Column(Integer)
+    negative_count = Column(Integer)
+    neutral_count = Column(Integer)
+    sentiment_trend = Column(String)  # 'bullish', 'slightly_bullish', 'neutral', 'slightly_bearish', 'bearish'
+    momentum = Column(Float)
+    confidence = Column(Float)
+    recommendation = Column(String)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('ticker', 'analysis_date'),
+        Index('idx_summary_ticker', 'ticker'),
+        Index('idx_summary_date', 'analysis_date'),
+    )
+
+
+class GoogleTrends(Base):
+    """Google Trends data"""
+    __tablename__ = 'google_trends'
+
+    keyword = Column(String, nullable=False)
+    date = Column(Date, nullable=False)
+    interest_value = Column(Float)
+    geo = Column(String, default='US')
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('keyword', 'date', 'geo'),
+        Index('idx_trends_keyword', 'keyword'),
+        Index('idx_trends_date', 'date'),
+    )
+
+
+# =============================================================================
+# Financial Health & Sector Tables
+# =============================================================================
+
+class FinancialHealthScores(Base):
+    """Financial health scores for companies"""
+    __tablename__ = 'financial_health_scores'
+
+    ticker = Column(String, nullable=False)
+    analysis_date = Column(Date, nullable=False)
+    liquidity_score = Column(Float)
+    profitability_score = Column(Float)
+    leverage_score = Column(Float)
+    efficiency_score = Column(Float)
+    growth_score = Column(Float)
+    composite_score = Column(Float)
+    health_grade = Column(String)  # 'A', 'B', 'C', 'D', 'F'
+    bankruptcy_risk = Column(Float)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('ticker', 'analysis_date'),
+        Index('idx_health_ticker', 'ticker'),
+        Index('idx_health_date', 'analysis_date'),
+        Index('idx_health_grade', 'health_grade'),
+    )
+
+
+class SectorRotationAnalysis(Base):
+    """Sector rotation analysis"""
+    __tablename__ = 'sector_rotation_analysis'
+
+    sector = Column(String, nullable=False)
+    analysis_date = Column(Date, nullable=False)
+    momentum_score = Column(Float)
+    relative_strength = Column(Float)
+    volume_trend = Column(Float)
+    breadth_indicator = Column(Float)
+    rotation_phase = Column(String)  # 'leading', 'weakening', 'lagging', 'improving'
+    recommendation = Column(String)  # 'overweight', 'neutral', 'underweight'
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('sector', 'analysis_date'),
+        Index('idx_sector_rotation_sector', 'sector'),
+        Index('idx_sector_rotation_date', 'analysis_date'),
+        Index('idx_sector_rotation_phase', 'rotation_phase'),
+    )
+
+
+class SectorRelativeStrength(Base):
+    """Sector relative strength tracking"""
+    __tablename__ = 'sector_relative_strength'
+
+    sector = Column(String, nullable=False)
+    date = Column(Date, nullable=False)
+    price_return_1w = Column(Float)
+    price_return_1m = Column(Float)
+    price_return_3m = Column(Float)
+    price_return_6m = Column(Float)
+    rs_score = Column(Float)  # Relative strength score
+    rs_rank = Column(Integer)  # Rank among sectors
+    breadth_ratio = Column(Float)  # % stocks above 200-day MA
+    volume_surge = Column(Float)  # Volume vs average
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('sector', 'date'),
+        Index('idx_sector_strength_sector', 'sector'),
+        Index('idx_sector_strength_date', 'date'),
+        Index('idx_sector_strength_rank', 'rs_rank'),
+    )
+
+
+# =============================================================================
 # API Keys Table
 # =============================================================================
 

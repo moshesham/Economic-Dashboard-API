@@ -30,7 +30,7 @@ def test_imports():
 def test_directories():
     """Test that required directories exist or can be created."""
     print("\nTesting directories...")
-    from config_settings import ensure_cache_dir, get_cache_dir
+    from core.config import ensure_cache_dir, get_cache_dir
     import os
     
     try:

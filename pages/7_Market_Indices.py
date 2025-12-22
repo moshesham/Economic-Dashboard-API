@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 from modules.data_loader import load_yfinance_data
-from config_settings import is_offline_mode
+from core.config import is_offline_mode
 
 
 def get_close_prices(df: pd.DataFrame, ticker: str) -> pd.Series:

@@ -12,7 +12,7 @@ import os
 import pickle
 import time
 from typing import Optional
-from config_settings import (
+from core.config import (
     is_offline_mode, can_use_offline_data, get_cache_dir,
     ensure_cache_dir, CACHE_EXPIRY_HOURS, YFINANCE_RATE_LIMIT_DELAY,
     YFINANCE_BATCH_SIZE, YFINANCE_CACHE_HOURS

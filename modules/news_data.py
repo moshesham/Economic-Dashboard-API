@@ -11,7 +11,7 @@ from typing import Optional
 import requests
 import pandas as pd
 
-from config_settings import ensure_cache_dir, get_cache_dir
+from core.config import ensure_cache_dir, get_cache_dir
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

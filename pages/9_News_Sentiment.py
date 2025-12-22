@@ -16,7 +16,7 @@ from modules.sentiment_analysis import (
     get_sentiment_summary,
     get_aggregated_sentiment
 )
-from config_settings import is_offline_mode
+from core.config import is_offline_mode
 
 # Page configuration
 st.set_page_config(
