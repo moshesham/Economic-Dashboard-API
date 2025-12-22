@@ -150,7 +150,7 @@ class TestDatabaseSchema:
 
     def test_ici_etf_flows_table_creation(self):
         """Test ICI ETF flows table can be created."""
-        from modules.database.schema import create_ici_etf_flows_table
+        from modules.database.schema_generator import create_ici_etf_flows_table
         
         # Should not raise any errors
         try:
@@ -160,7 +160,7 @@ class TestDatabaseSchema:
 
     def test_ici_etf_weekly_flows_table_creation(self):
         """Test ICI weekly ETF flows table can be created."""
-        from modules.database.schema import create_ici_etf_weekly_flows_table
+        from modules.database.schema_generator import create_ici_etf_weekly_flows_table
         
         try:
             create_ici_etf_weekly_flows_table()
@@ -169,7 +169,7 @@ class TestDatabaseSchema:
 
     def test_cboe_vix_history_table_creation(self):
         """Test CBOE VIX history table can be created."""
-        from modules.database.schema import create_cboe_vix_history_table
+        from modules.database.schema_generator import create_cboe_vix_history_table
         
         try:
             create_cboe_vix_history_table()
@@ -178,7 +178,7 @@ class TestDatabaseSchema:
 
     def test_cboe_vix_term_structure_table_creation(self):
         """Test CBOE VIX term structure table can be created."""
-        from modules.database.schema import create_cboe_vix_term_structure_table
+        from modules.database.schema_generator import create_cboe_vix_term_structure_table
         
         try:
             create_cboe_vix_term_structure_table()

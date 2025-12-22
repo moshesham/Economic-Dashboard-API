@@ -34,7 +34,7 @@ print("TEST 2: Database Schema Creation")
 print("-" * 80)
 
 try:
-    from modules.database.schema import (
+    from modules.database.schema_legacy import (
         create_financial_health_scores_table,
         create_sector_rotation_analysis_table,
         create_sector_relative_strength_table

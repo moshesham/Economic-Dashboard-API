@@ -20,7 +20,7 @@ print("=" * 60)
 print("\n[1/6] Testing database schema for margin risk tables...")
 try:
     from modules.database import get_db_connection
-    from modules.database.schema import (
+    from modules.database.schema_legacy import (
         create_leverage_metrics_table,
         create_vix_term_structure_table,
         create_leveraged_etf_data_table,

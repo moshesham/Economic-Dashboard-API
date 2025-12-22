@@ -14,7 +14,7 @@ import os
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from modules.database.factory import get_db_connection, get_backend
-from modules.database.postgres_schema import create_all_tables
+from modules.database.schema_generator import create_all_tables
 
 
 def main():
@@ -29,15 +29,14 @@ def main():
         backend_name = db_backend.__class__.__name__
         print(f"Using database backend: {backend_name}")
         
-        # Initialize database schema
-        if backend_name == 'PostgreSQLBackend':
-            print("Creating PostgreSQL tables...")
-            from modules.database.postgres_schema import create_all_tables
-            create_all_tables(db_backend)
-        elif backend_name == 'DuckDBBackend':
-            print("DuckDB tables are created on first access...")
-        else:
-            raise ValueError(f"Unsupported backend: {backend_name}")
+        # Initialize database schema using unified schema generator
+        print(f"Creating {backend_name} tables from SQLAlchemy models...")
+        from modules.database.schema_generator import create_all_tables, set_schema_db, clear_schema_db
+        set_schema_db(db_backend)
+        try:
+            create_all_tables()
+        finally:
+            clear_schema_db()
         
         # Verify tables were created
         print("\nVerifying database setup...")

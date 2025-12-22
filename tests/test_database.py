@@ -266,7 +266,7 @@ class TestSchemaCreation:
     
     def test_fred_data_table_creation(self, reset_db_singleton, mock_duckdb_env):
         """Test FRED data table can be created."""
-        from modules.database.schema import create_fred_data_table
+        from modules.database.schema_generator import create_fred_data_table
         from modules.database.factory import get_db_connection
         
         create_fred_data_table()
@@ -276,7 +276,7 @@ class TestSchemaCreation:
     
     def test_yfinance_ohlcv_table_creation(self, reset_db_singleton, mock_duckdb_env):
         """Test yfinance OHLCV table can be created."""
-        from modules.database.schema import create_yfinance_ohlcv_table
+        from modules.database.schema_generator import create_yfinance_ohlcv_table
         from modules.database.factory import get_db_connection
         
         create_yfinance_ohlcv_table()
@@ -286,7 +286,7 @@ class TestSchemaCreation:
     
     def test_ml_predictions_table_creation(self, reset_db_singleton, mock_duckdb_env):
         """Test ML predictions table can be created."""
-        from modules.database.schema import create_ml_predictions_table
+        from modules.database.schema_generator import create_ml_predictions_table
         from modules.database.factory import get_db_connection
         
         create_ml_predictions_table()

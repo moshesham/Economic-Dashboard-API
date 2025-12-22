@@ -113,7 +113,7 @@ class DuckDBBackend:
     
     def _initialize_schema(self) -> None:
         """Create all necessary tables for a new database."""
-        from .schema import create_all_tables, set_schema_db, clear_schema_db
+        from .schema_generator import create_all_tables, set_schema_db, clear_schema_db
         # Set the db reference before calling create_all_tables to avoid circular imports
         set_schema_db(self)
         try:
@@ -217,8 +217,13 @@ class PostgreSQLBackend:
     
     def _initialize_schema(self) -> None:
         """Create all necessary tables if they don't exist."""
-        from .postgres_schema import create_all_tables
-        create_all_tables(self)
+        from .schema_generator import create_all_tables, set_schema_db, clear_schema_db
+        # Set the db reference before calling create_all_tables to avoid circular imports
+        set_schema_db(self)
+        try:
+            create_all_tables()
+        finally:
+            clear_schema_db()
     
     def query(self, sql: str, params: Optional[tuple] = None) -> pd.DataFrame:
         """Execute a SELECT query and return results as DataFrame."""

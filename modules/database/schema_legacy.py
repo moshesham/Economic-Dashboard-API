@@ -1,7 +1,28 @@
 """
-Database Schema Definitions
+Database Schema Definitions (LEGACY - DEPRECATED)
 
-Defines all tables for the Economic Dashboard DuckDB database.
+⚠️ DEPRECATION NOTICE:
+This file is deprecated and maintained ONLY for backwards compatibility with feature-specific
+tables that have not yet been migrated to the SQLAlchemy models in models.py.
+
+For all core tables (FRED, YFinance, SEC, ML, etc.), use schema_generator.py which generates
+schemas from the SQLAlchemy models in models.py (single source of truth).
+
+This file contains only legacy feature-specific tables:
+- leverage_metrics
+- vix_term_structure (legacy variant)
+- leveraged_etf_data
+- margin_call_risk
+- financial_health_scores
+- sector_rotation_analysis
+- sector_relative_strength
+- sentiment_summary
+- google_trends
+- sec_filings (legacy)
+- sec_fails_to_deliver
+- sec_13f_holdings
+
+TODO: Migrate these tables to models.py and remove this file entirely.
 """
 
 # Module-level variable to store reference to db during schema creation
