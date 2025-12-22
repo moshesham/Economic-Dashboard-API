@@ -1,62 +1,45 @@
 """
 Configuration settings for the Economic Dashboard.
 Controls offline mode and caching behavior.
+
+DEPRECATED: This module is deprecated and maintained only for backward compatibility.
+Please import from core.config instead:
+    from core.config import is_offline_mode, can_use_offline_data, get_cache_dir, ensure_cache_dir
+    from core.config import settings  # For CACHE_EXPIRY_HOURS, YFINANCE_* constants
+
+This file will be removed in a future version.
 """
 
-import os
+import warnings
 
-# Offline mode settings
-OFFLINE_MODE = os.getenv('ECONOMIC_DASHBOARD_OFFLINE', 'false').lower() == 'true'
+# Issue deprecation warning when this module is imported
+warnings.warn(
+    "config_settings is deprecated. Use 'from core.config import ...' instead. "
+    "This module will be removed in a future version.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
-# Cache settings
-CACHE_DIR = 'data/cache'
-CACHE_EXPIRY_HOURS = 24  # How long to keep cached data
+# Import everything from core.config for backward compatibility
+from core.config import (
+    is_offline_mode,
+    can_use_offline_data,
+    get_cache_dir,
+    ensure_cache_dir,
+    DATA_SOURCES,
+    CACHE_EXPIRY_HOURS,
+    YFINANCE_RATE_LIMIT_DELAY,
+    YFINANCE_BATCH_SIZE,
+    YFINANCE_CACHE_HOURS,
+    settings
+)
 
-# Yahoo Finance rate limiting
-YFINANCE_RATE_LIMIT_DELAY = 0.5  # Seconds between requests
-YFINANCE_BATCH_SIZE = 5  # Max tickers to fetch in one batch
-YFINANCE_CACHE_HOURS = 24  # Cache Yahoo Finance data for 24 hours
+# Backward compatibility aliases
+OFFLINE_MODE = settings.OFFLINE_MODE
+CACHE_DIR = settings.CACHE_DIR
 
-# Data sources
-DATA_SOURCES = {
-    'fred': {
-        'online': True,
-        'offline_file': 'data/sample_fred_data.csv',
-        'cache_file': f'{CACHE_DIR}/fred_cache.pkl'
-    },
-    'yfinance': {
-        'online': True,
-        'offline_dir': 'data/',
-        'cache_dir': f'{CACHE_DIR}/yfinance/'
-    },
-    'world_bank': {
-        'online': True,
-        'offline_file': 'data/sample_world_bank_gdp.csv',
-        'cache_file': f'{CACHE_DIR}/world_bank_cache.pkl'
-    }
-}
-
-# Sample data settings
 SAMPLE_DATA_AVAILABLE = {
-    'fred': os.path.exists('data/sample_fred_data.csv'),
-    'yfinance': any(f.startswith('sample_') and f.endswith('_data.csv')
-                   for f in os.listdir('data/') if os.path.isfile(os.path.join('data', f))),
-    'world_bank': os.path.exists('data/sample_world_bank_gdp.csv')
+    'fred': can_use_offline_data('fred'),
+    'yfinance': can_use_offline_data('yfinance'),
+    'world_bank': can_use_offline_data('world_bank')
 }
-
-def is_offline_mode():
-    """Check if offline mode is enabled."""
-    return OFFLINE_MODE
-
-def can_use_offline_data(source):
-    """Check if offline data is available for a source."""
-    return SAMPLE_DATA_AVAILABLE.get(source, False)
-
-def get_cache_dir():
-    """Get the cache directory path."""
-    return CACHE_DIR
-
-def ensure_cache_dir():
-    """Ensure cache directory exists."""
-    os.makedirs(CACHE_DIR, exist_ok=True)
-    os.makedirs(f'{CACHE_DIR}/yfinance/', exist_ok=True)
