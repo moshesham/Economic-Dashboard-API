@@ -15,7 +15,6 @@ from .models import XGBoostModel, LightGBMModel, EnsembleModel
 from .training import ModelTrainer
 from .prediction import PredictionEngine
 from .evaluation import ModelEvaluator
-from .prediction_engine import PredictionEngine as AdvancedPredictionEngine
 from .recession_model import RecessionProbabilityModel
 from .feature_engineering import FeatureEngineer, FeatureConfig
 from .hyperparameter_tuning import HyperparameterOptimizer, OptimizationConfig, optimize_model_hyperparameters
@@ -29,7 +28,6 @@ __all__ = [
     # Training & Prediction
     'ModelTrainer',
     'PredictionEngine',
-    'AdvancedPredictionEngine',
     
     # Evaluation
     'ModelEvaluator',

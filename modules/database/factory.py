@@ -379,12 +379,6 @@ def close_db_connection() -> None:
         _db_connection = None
 
 
-def init_database():
-    """Initialize the database schema."""
-    # Schema initialization is now handled in backend constructors
-    pass
-
-
 @contextmanager
 def db_transaction():
     """Context manager for database transactions."""
