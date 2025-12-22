@@ -264,34 +264,23 @@ class TestErrorHandling:
 class TestSchemaCreation:
     """Tests for schema creation functions."""
     
-    def test_fred_data_table_creation(self, reset_db_singleton, mock_duckdb_env):
-        """Test FRED data table can be created."""
-        from modules.database.schema_generator import create_fred_data_table
-        from modules.database.factory import get_db_connection
+    def test_schema_creation(self, reset_db_singleton, mock_duckdb_env):
+        """Test all tables can be created via create_all_tables."""
+        from modules.database.schema_generator import create_all_tables, set_schema_db, clear_schema_db
+        from modules.database.factory import get_db_connection, get_backend
         
-        create_fred_data_table()
+        # Create all tables
+        db_backend = get_backend()
+        set_schema_db(db_backend)
+        try:
+            create_all_tables()
+        finally:
+            clear_schema_db()
         
+        # Verify key tables exist
         db = get_db_connection()
         assert db.table_exists('fred_data')
-    
-    def test_yfinance_ohlcv_table_creation(self, reset_db_singleton, mock_duckdb_env):
-        """Test yfinance OHLCV table can be created."""
-        from modules.database.schema_generator import create_yfinance_ohlcv_table
-        from modules.database.factory import get_db_connection
-        
-        create_yfinance_ohlcv_table()
-        
-        db = get_db_connection()
         assert db.table_exists('yfinance_ohlcv')
-    
-    def test_ml_predictions_table_creation(self, reset_db_singleton, mock_duckdb_env):
-        """Test ML predictions table can be created."""
-        from modules.database.schema_generator import create_ml_predictions_table
-        from modules.database.factory import get_db_connection
-        
-        create_ml_predictions_table()
-        
-        db = get_db_connection()
         assert db.table_exists('ml_predictions')
 
 

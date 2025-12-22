@@ -146,44 +146,29 @@ class TestCBOEVIXDataLoader:
 
 
 class TestDatabaseSchema:
-    """Test cases for new database schema tables."""
+    """Test cases for database schema creation."""
 
-    def test_ici_etf_flows_table_creation(self):
-        """Test ICI ETF flows table can be created."""
-        from modules.database.schema_generator import create_ici_etf_flows_table
+    def test_schema_creation(self):
+        """Test all market data tables can be created."""
+        from modules.database.schema_generator import create_all_tables, set_schema_db, clear_schema_db
+        from modules.database.factory import get_backend, get_db_connection
         
-        # Should not raise any errors
+        # Create all tables
+        db_backend = get_backend()
+        set_schema_db(db_backend)
         try:
-            create_ici_etf_flows_table()
+            create_all_tables()
         except Exception as e:
-            pytest.fail(f"Failed to create ici_etf_flows table: {e}")
-
-    def test_ici_etf_weekly_flows_table_creation(self):
-        """Test ICI weekly ETF flows table can be created."""
-        from modules.database.schema_generator import create_ici_etf_weekly_flows_table
+            pytest.fail(f"Failed to create tables: {e}")
+        finally:
+            clear_schema_db()
         
-        try:
-            create_ici_etf_weekly_flows_table()
-        except Exception as e:
-            pytest.fail(f"Failed to create ici_etf_weekly_flows table: {e}")
-
-    def test_cboe_vix_history_table_creation(self):
-        """Test CBOE VIX history table can be created."""
-        from modules.database.schema_generator import create_cboe_vix_history_table
-        
-        try:
-            create_cboe_vix_history_table()
-        except Exception as e:
-            pytest.fail(f"Failed to create cboe_vix_history table: {e}")
-
-    def test_cboe_vix_term_structure_table_creation(self):
-        """Test CBOE VIX term structure table can be created."""
-        from modules.database.schema_generator import create_cboe_vix_term_structure_table
-        
-        try:
-            create_cboe_vix_term_structure_table()
-        except Exception as e:
-            pytest.fail(f"Failed to create cboe_vix_term_structure table: {e}")
+        # Verify key market data tables exist
+        db = get_db_connection()
+        assert db.table_exists('ici_etf_flows')
+        assert db.table_exists('ici_etf_weekly_flows')
+        assert db.table_exists('cboe_vix_history')
+        assert db.table_exists('cboe_vix_term_structure')
 
 
 class TestDatabaseQueries:
