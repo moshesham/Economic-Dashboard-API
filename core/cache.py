@@ -248,7 +248,7 @@ class CacheMiddleware(BaseHTTPMiddleware):
     Automatically caches responses for GET requests with status code 200.
     """
     
-    def __init__(self, app, ttl: int = None, cache_paths: list = None):
+    def __init__(self, app, ttl: Optional[int] = None, cache_paths: Optional[list] = None):
         """
         Initialize cache middleware.
         
@@ -259,9 +259,12 @@ class CacheMiddleware(BaseHTTPMiddleware):
         """
         super().__init__(app)
         self.ttl = ttl or settings.REDIS_CACHE_TTL
-        self.cache_paths = cache_paths or ["/v1/data", "/v1/features", "/v1/predictions", "/v1/signals"]
+        if cache_paths is None:
+            self.cache_paths = ["/v1/data", "/v1/features", "/v1/predictions", "/v1/signals"]
+        else:
+            self.cache_paths = cache_paths
     
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Process request and cache if applicable."""
         # Only cache GET requests
         if request.method != "GET":
@@ -291,6 +294,7 @@ class CacheMiddleware(BaseHTTPMiddleware):
                     headers={
                         **cached_data.get("headers", {}),
                         "X-Cache": "HIT",
+                        "Content-Type": "application/json",
                     },
                     media_type="application/json"
                 )
@@ -308,20 +312,24 @@ class CacheMiddleware(BaseHTTPMiddleware):
                 body += chunk
             
             try:
-                # Parse and cache
-                response_data = {
-                    "content": json.loads(body.decode()),
-                    "status_code": response.status_code,
-                    "headers": dict(response.headers),
-                }
-                cache_manager.set(full_key, json.dumps(response_data, default=str), self.ttl)
-                logger.debug(f"HTTP cache miss: {path}")
+                # Parse and cache (only if it's JSON)
+                content_type = response.headers.get("content-type", "")
+                if "application/json" in content_type:
+                    response_data = {
+                        "content": json.loads(body.decode()),
+                        "status_code": response.status_code,
+                        "headers": dict(response.headers),
+                    }
+                    cache_manager.set(full_key, json.dumps(response_data, default=str), self.ttl)
+                    logger.debug(f"HTTP cache miss (cached): {path}")
+                else:
+                    logger.debug(f"HTTP cache miss (not cached - not JSON): {path}")
                 
                 # Return response with cached body
                 return Response(
                     content=body,
                     status_code=response.status_code,
-                    headers={**response.headers, "X-Cache": "MISS"},
+                    headers={**dict(response.headers), "X-Cache": "MISS"},
                     media_type=response.media_type
                 )
             except Exception as e:
@@ -329,7 +337,7 @@ class CacheMiddleware(BaseHTTPMiddleware):
                 return Response(
                     content=body,
                     status_code=response.status_code,
-                    headers=response.headers,
+                    headers=dict(response.headers),
                     media_type=response.media_type
                 )
         
