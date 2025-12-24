@@ -6,6 +6,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-green.svg)](https://fastapi.tiangolo.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue.svg)](https://www.postgresql.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
+[![CI](https://github.com/moshesham/Economic-Dashboard-API/workflows/CI%20-%20Test%20%26%20Lint/badge.svg)](https://github.com/moshesham/Economic-Dashboard-API/actions)
+[![Security](https://github.com/moshesham/Economic-Dashboard-API/workflows/Security%20Scan/badge.svg)](https://github.com/moshesham/Economic-Dashboard-API/actions)
 
 ## 🎉 What's New - December 2025
 
@@ -17,7 +19,15 @@
 - ✅ **Unified HTTP Client** - Built-in rate limiting, retries, and error handling
 - ✅ **Data Validation** - Pandera schemas ensure data quality
 
-📖 **[Read the Full Refactor Summary](docs/REFACTOR_SUMMARY.md)**
+**Production-Grade Features (NEW):**
+- ✅ **API Response Caching** - Redis-based caching with automatic cache invalidation
+- ✅ **Centralized Logging** - Structured JSON logging with correlation IDs
+- ✅ **Request Tracking** - Full request tracing across distributed systems
+- ✅ **80% Test Coverage** - Comprehensive unit and integration tests
+- ✅ **Security Scanning** - Automated vulnerability scanning with CodeQL and Bandit
+
+📖 **[Read the Full Refactor Summary](docs/REFACTOR_SUMMARY.md)**  
+📖 **[Production Features Documentation](docs/PRODUCTION_FEATURES.md)**
 
 ---
 
