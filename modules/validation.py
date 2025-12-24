@@ -190,6 +190,7 @@ bls_schema = DataFrameSchema({
 census_schema = DataFrameSchema({
     "date": Column(pd.Timestamp, nullable=False, coerce=True),
     "indicator": Column(str, nullable=False),
+    "category": Column(str, nullable=False, default=''),  # Required for primary key
     "value": Column(float, nullable=True),
 }, strict=False)
 

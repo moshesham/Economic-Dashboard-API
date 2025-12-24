@@ -452,10 +452,12 @@ class EIAClient(BaseAPIClient):
         )
     
     def _add_auth(self, params: Optional[Dict] = None, headers: Optional[Dict] = None) -> tuple:
-        """Add EIA API key to headers."""
+        """Add EIA API key to query parameters."""
         params = params or {}
         headers = headers or {}
-        headers['X-Params'] = f'{{"api_key": "{self.api_key}"}}'
+        # EIA API v2 uses query parameter for API key
+        if self.api_key:
+            params['api_key'] = self.api_key
         return params, headers
 
 

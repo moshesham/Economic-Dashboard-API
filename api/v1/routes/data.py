@@ -298,19 +298,24 @@ async def get_worldbank_data(
         
         db = get_db_connection()
         query = "SELECT * FROM worldbank_indicators WHERE 1=1"
+        params = []
         
         if country_code:
-            query += f" AND country_code = '{country_code.upper()}'"
+            query += " AND country_code = ?"
+            params.append(country_code.upper())
         if indicator:
-            query += f" AND indicator_code = '{indicator}'"
+            query += " AND indicator_code = ?"
+            params.append(indicator)
         if start_year:
-            query += f" AND year >= {start_year}"
+            query += " AND year >= ?"
+            params.append(start_year)
         if end_year:
-            query += f" AND year <= {end_year}"
+            query += " AND year <= ?"
+            params.append(end_year)
         
         query += " ORDER BY country_code, indicator_code, year"
         
-        df = db.query(query)
+        df = db.query(query, tuple(params) if params else None)
         
         if df.empty:
             return {"data": [], "count": 0}
@@ -346,17 +351,21 @@ async def get_imf_exchange_rates(
         
         db = get_db_connection()
         query = "SELECT * FROM imf_exchange_rates WHERE 1=1"
+        params = []
         
         if country_code:
-            query += f" AND country_code = '{country_code.upper()}'"
+            query += " AND country_code = ?"
+            params.append(country_code.upper())
         if start_year:
-            query += f" AND year >= {start_year}"
+            query += " AND year >= ?"
+            params.append(start_year)
         if end_year:
-            query += f" AND year <= {end_year}"
+            query += " AND year <= ?"
+            params.append(end_year)
         
         query += " ORDER BY country_code, year"
         
-        df = db.query(query)
+        df = db.query(query, tuple(params) if params else None)
         
         if df.empty:
             return {"data": [], "count": 0}
@@ -396,19 +405,24 @@ async def get_oecd_data(
         
         db = get_db_connection()
         query = "SELECT * FROM oecd_indicators WHERE 1=1"
+        params = []
         
         if country_code:
-            query += f" AND country_code = '{country_code.upper()}'"
+            query += " AND country_code = ?"
+            params.append(country_code.upper())
         if indicator:
-            query += f" AND indicator = '{indicator.upper()}'"
+            query += " AND indicator = ?"
+            params.append(indicator.upper())
         if start_date:
-            query += f" AND date >= '{start_date}'"
+            query += " AND date >= ?"
+            params.append(start_date)
         if end_date:
-            query += f" AND date <= '{end_date}'"
+            query += " AND date <= ?"
+            params.append(end_date)
         
         query += " ORDER BY country_code, indicator, date"
         
-        df = db.query(query)
+        df = db.query(query, tuple(params) if params else None)
         
         if df.empty:
             return {"data": [], "count": 0}
@@ -446,17 +460,21 @@ async def get_bls_data(
         
         db = get_db_connection()
         query = "SELECT * FROM bls_data WHERE 1=1"
+        params = []
         
         if series_id:
-            query += f" AND series_id = '{series_id.upper()}'"
+            query += " AND series_id = ?"
+            params.append(series_id.upper())
         if start_date:
-            query += f" AND date >= '{start_date}'"
+            query += " AND date >= ?"
+            params.append(start_date)
         if end_date:
-            query += f" AND date <= '{end_date}'"
+            query += " AND date <= ?"
+            params.append(end_date)
         
         query += " ORDER BY series_id, date"
         
-        df = db.query(query)
+        df = db.query(query, tuple(params) if params else None)
         
         if df.empty:
             return {"data": [], "count": 0}
@@ -494,17 +512,21 @@ async def get_census_data(
         
         db = get_db_connection()
         query = "SELECT * FROM census_data WHERE 1=1"
+        params = []
         
         if indicator:
-            query += f" AND indicator = '{indicator.upper()}'"
+            query += " AND indicator = ?"
+            params.append(indicator.upper())
         if start_date:
-            query += f" AND date >= '{start_date}'"
+            query += " AND date >= ?"
+            params.append(start_date)
         if end_date:
-            query += f" AND date <= '{end_date}'"
+            query += " AND date <= ?"
+            params.append(end_date)
         
         query += " ORDER BY indicator, date"
         
-        df = db.query(query)
+        df = db.query(query, tuple(params) if params else None)
         
         if df.empty:
             return {"data": [], "count": 0}
@@ -542,17 +564,21 @@ async def get_eia_data(
         
         db = get_db_connection()
         query = "SELECT * FROM eia_data WHERE 1=1"
+        params = []
         
         if series_id:
-            query += f" AND series_id = '{series_id}'"
+            query += " AND series_id = ?"
+            params.append(series_id)
         if start_date:
-            query += f" AND date >= '{start_date}'"
+            query += " AND date >= ?"
+            params.append(start_date)
         if end_date:
-            query += f" AND date <= '{end_date}'"
+            query += " AND date <= ?"
+            params.append(end_date)
         
         query += " ORDER BY series_id, date"
         
-        df = db.query(query)
+        df = db.query(query, tuple(params) if params else None)
         
         if df.empty:
             return {"data": [], "count": 0}

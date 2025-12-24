@@ -350,16 +350,17 @@ def refresh_census_data(
     # Fetch trade data
     if include_trade:
         logger.info("Refreshing Census trade data")
-        try:
-            # Fetch both exports and imports
-            for trade_type in ['exports', 'imports']:
+        for trade_type in ['exports', 'imports']:
+            try:
                 df = fetch_census_trade(api_key=api_key, trade_type=trade_type)
                 if not df.empty:
                     records = insert_generic_data(df, 'census_data')
                     total_records += records
                     logger.info(f"Inserted {records} Census {trade_type} records")
-        except Exception as e:
-            logger.error(f"Error refreshing Census trade data: {e}")
+            except Exception as e:
+                logger.error(f"Error refreshing Census {trade_type} data: {e}")
+                # Continue with next trade type instead of failing completely
+                continue
     
     logger.info(f"Total Census records inserted: {total_records}")
     return total_records
