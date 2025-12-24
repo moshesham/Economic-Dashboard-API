@@ -36,6 +36,16 @@ async def health_check():
     except Exception as e:
         redis_status = f"unhealthy: {str(e)}"
     
+    # Check cache status
+    cache_status = "healthy"
+    try:
+        from core.cache import get_cache_stats
+        stats = get_cache_stats()
+        if not stats.get("enabled"):
+            cache_status = "disabled"
+    except Exception as e:
+        cache_status = f"error: {str(e)}"
+    
     return {
         "status": "healthy" if db_status == "healthy" else "degraded",
         "timestamp": datetime.utcnow().isoformat(),
@@ -43,6 +53,7 @@ async def health_check():
         "components": {
             "database": db_status,
             "redis": redis_status,
+            "cache": cache_status,
         },
         "environment": os.getenv("ENVIRONMENT", "development"),
     }
@@ -89,3 +100,15 @@ async def readiness_check():
             "reason": str(e),
             "timestamp": datetime.utcnow().isoformat(),
         }
+
+
+@router.get("/cache/stats")
+async def cache_stats():
+    """
+    Get cache statistics.
+    
+    Returns:
+        Cache hit/miss statistics and memory usage
+    """
+    from core.cache import get_cache_stats
+    return get_cache_stats()
