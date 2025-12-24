@@ -597,3 +597,144 @@ class APIKey(Base):
         Index('idx_api_key_hash', 'key_hash'),
         Index('idx_api_key_active', 'is_active'),
     )
+
+
+# =============================================================================
+# Open Data Sources Tables
+# =============================================================================
+
+class WorldBankIndicators(Base):
+    """World Bank economic indicators"""
+    __tablename__ = 'worldbank_indicators'
+
+    country_code = Column(String, nullable=False)
+    country_name = Column(String)
+    indicator_code = Column(String, nullable=False)
+    indicator_name = Column(String)
+    year = Column(Integer, nullable=False)
+    date = Column(Date, nullable=False)
+    value = Column(Float)
+    unit = Column(String)
+    decimal = Column(Integer)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('country_code', 'indicator_code', 'year'),
+        Index('idx_wb_country', 'country_code'),
+        Index('idx_wb_indicator', 'indicator_code'),
+        Index('idx_wb_date', 'date'),
+    )
+
+
+class IMFExchangeRates(Base):
+    """IMF exchange rate data"""
+    __tablename__ = 'imf_exchange_rates'
+
+    country_code = Column(String, nullable=False)
+    year = Column(Integer, nullable=False)
+    date = Column(Date, nullable=False)
+    exchange_rate = Column(Float)
+    indicator = Column(String)
+    indicator_name = Column(String)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('country_code', 'year'),
+        Index('idx_imf_xr_country', 'country_code'),
+        Index('idx_imf_xr_date', 'date'),
+    )
+
+
+class IMFIndicators(Base):
+    """IMF economic indicators"""
+    __tablename__ = 'imf_indicators'
+
+    country_code = Column(String, nullable=False)
+    indicator = Column(String, nullable=False)
+    year = Column(Integer, nullable=False)
+    date = Column(Date, nullable=False)
+    value = Column(Float)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('country_code', 'indicator', 'year'),
+        Index('idx_imf_ind_country', 'country_code'),
+        Index('idx_imf_ind_indicator', 'indicator'),
+        Index('idx_imf_ind_date', 'date'),
+    )
+
+
+class OECDIndicators(Base):
+    """OECD economic indicators"""
+    __tablename__ = 'oecd_indicators'
+
+    country_code = Column(String, nullable=False)
+    indicator = Column(String, nullable=False)
+    indicator_name = Column(String)
+    date = Column(Date, nullable=False)
+    period = Column(String)
+    year = Column(Integer)
+    value = Column(Float)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('country_code', 'indicator', 'date'),
+        Index('idx_oecd_country', 'country_code'),
+        Index('idx_oecd_indicator', 'indicator'),
+        Index('idx_oecd_date', 'date'),
+    )
+
+
+class BLSData(Base):
+    """Bureau of Labor Statistics data"""
+    __tablename__ = 'bls_data'
+
+    series_id = Column(String, nullable=False)
+    series_name = Column(String)
+    year = Column(Integer, nullable=False)
+    period = Column(String, nullable=False)
+    date = Column(Date, nullable=False)
+    value = Column(Float)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('series_id', 'year', 'period'),
+        Index('idx_bls_series', 'series_id'),
+        Index('idx_bls_date', 'date'),
+    )
+
+
+class CensusData(Base):
+    """US Census Bureau economic data"""
+    __tablename__ = 'census_data'
+
+    date = Column(Date, nullable=False)
+    indicator = Column(String, nullable=False)
+    category = Column(String)
+    value = Column(Float)
+    seasonally_adjusted = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('date', 'indicator', 'category'),
+        Index('idx_census_date', 'date'),
+        Index('idx_census_indicator', 'indicator'),
+    )
+
+
+class EIAData(Base):
+    """Energy Information Administration data"""
+    __tablename__ = 'eia_data'
+
+    series_id = Column(String, nullable=False)
+    series_name = Column(String)
+    period = Column(String, nullable=False)
+    date = Column(Date, nullable=False)
+    value = Column(Float)
+    created_at = Column(DateTime, default=func.now())
+
+    __table_args__ = (
+        PrimaryKeyConstraint('series_id', 'period'),
+        Index('idx_eia_series', 'series_id'),
+        Index('idx_eia_date', 'date'),
+    )

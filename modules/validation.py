@@ -132,6 +132,78 @@ sec_filings_schema = DataFrameSchema({
 }, strict=False)
 
 
+# World Bank Indicators Schema
+worldbank_schema = DataFrameSchema({
+    "country_code": Column(str, nullable=False),
+    "country_name": Column(str, nullable=True),
+    "indicator_code": Column(str, nullable=False),
+    "indicator_name": Column(str, nullable=True),
+    "year": Column(int, nullable=False),
+    "date": Column(pd.Timestamp, nullable=False, coerce=True),
+    "value": Column(float, nullable=True),
+}, strict=False)
+
+
+# IMF Exchange Rates Schema
+imf_exchange_rates_schema = DataFrameSchema({
+    "country_code": Column(str, nullable=False),
+    "year": Column(int, nullable=False),
+    "date": Column(pd.Timestamp, nullable=False, coerce=True),
+    "exchange_rate": Column(float, nullable=True),
+    "indicator": Column(str, nullable=True),
+    "indicator_name": Column(str, nullable=True),
+}, strict=False)
+
+
+# IMF Indicators Schema
+imf_indicators_schema = DataFrameSchema({
+    "country_code": Column(str, nullable=False),
+    "indicator": Column(str, nullable=False),
+    "year": Column(int, nullable=False),
+    "date": Column(pd.Timestamp, nullable=False, coerce=True),
+    "value": Column(float, nullable=True),
+}, strict=False)
+
+
+# OECD Indicators Schema
+oecd_schema = DataFrameSchema({
+    "country_code": Column(str, nullable=False),
+    "indicator": Column(str, nullable=False),
+    "indicator_name": Column(str, nullable=True),
+    "date": Column(pd.Timestamp, nullable=False, coerce=True),
+    "value": Column(float, nullable=True),
+}, strict=False)
+
+
+# BLS Data Schema
+bls_schema = DataFrameSchema({
+    "series_id": Column(str, nullable=False),
+    "series_name": Column(str, nullable=True),
+    "year": Column(int, nullable=False),
+    "period": Column(str, nullable=False),
+    "date": Column(pd.Timestamp, nullable=False, coerce=True),
+    "value": Column(float, nullable=True),
+}, strict=False)
+
+
+# Census Bureau Data Schema
+census_schema = DataFrameSchema({
+    "date": Column(pd.Timestamp, nullable=False, coerce=True),
+    "indicator": Column(str, nullable=False),
+    "value": Column(float, nullable=True),
+}, strict=False)
+
+
+# EIA Data Schema
+eia_schema = DataFrameSchema({
+    "series_id": Column(str, nullable=False),
+    "series_name": Column(str, nullable=True),
+    "period": Column(str, nullable=False),
+    "date": Column(pd.Timestamp, nullable=False, coerce=True),
+    "value": Column(float, nullable=True),
+}, strict=False)
+
+
 # Validator instances
 class FREDValidator(DataValidator):
     """Validator for FRED economic data."""
@@ -181,6 +253,48 @@ class SECFilingsValidator(DataValidator):
         super().__init__(sec_filings_schema)
 
 
+class WorldBankValidator(DataValidator):
+    """Validator for World Bank indicators."""
+    def __init__(self):
+        super().__init__(worldbank_schema)
+
+
+class IMFExchangeRatesValidator(DataValidator):
+    """Validator for IMF exchange rates."""
+    def __init__(self):
+        super().__init__(imf_exchange_rates_schema)
+
+
+class IMFIndicatorsValidator(DataValidator):
+    """Validator for IMF indicators."""
+    def __init__(self):
+        super().__init__(imf_indicators_schema)
+
+
+class OECDValidator(DataValidator):
+    """Validator for OECD indicators."""
+    def __init__(self):
+        super().__init__(oecd_schema)
+
+
+class BLSValidator(DataValidator):
+    """Validator for BLS data."""
+    def __init__(self):
+        super().__init__(bls_schema)
+
+
+class CensusValidator(DataValidator):
+    """Validator for Census Bureau data."""
+    def __init__(self):
+        super().__init__(census_schema)
+
+
+class EIAValidator(DataValidator):
+    """Validator for EIA data."""
+    def __init__(self):
+        super().__init__(eia_schema)
+
+
 # Factory function
 def get_validator(data_type: str) -> DataValidator:
     """
@@ -203,6 +317,18 @@ def get_validator(data_type: str) -> DataValidator:
         'technical_features': TechnicalFeaturesValidator,
         'ml_predictions': MLPredictionsValidator,
         'sec_filings': SECFilingsValidator,
+        'worldbank': WorldBankValidator,
+        'worldbank_indicators': WorldBankValidator,
+        'imf_exchange_rates': IMFExchangeRatesValidator,
+        'imf_indicators': IMFIndicatorsValidator,
+        'oecd': OECDValidator,
+        'oecd_indicators': OECDValidator,
+        'bls': BLSValidator,
+        'bls_data': BLSValidator,
+        'census': CensusValidator,
+        'census_data': CensusValidator,
+        'eia': EIAValidator,
+        'eia_data': EIAValidator,
     }
     
     data_type = data_type.lower()
@@ -254,6 +380,18 @@ def _get_primary_key_columns(data_type: str) -> list:
         'technical_features': ['ticker', 'date'],
         'ml_predictions': ['ticker', 'prediction_date', 'target_date', 'model_name'],
         'sec_filings': ['accession_number'],
+        'worldbank': ['country_code', 'indicator_code', 'year'],
+        'worldbank_indicators': ['country_code', 'indicator_code', 'year'],
+        'imf_exchange_rates': ['country_code', 'year'],
+        'imf_indicators': ['country_code', 'indicator', 'year'],
+        'oecd': ['country_code', 'indicator', 'date'],
+        'oecd_indicators': ['country_code', 'indicator', 'date'],
+        'bls': ['series_id', 'year', 'period'],
+        'bls_data': ['series_id', 'year', 'period'],
+        'census': ['date', 'indicator', 'category'],
+        'census_data': ['date', 'indicator', 'category'],
+        'eia': ['series_id', 'period'],
+        'eia_data': ['series_id', 'period'],
     }
     
     return pk_mappings.get(data_type.lower(), [])
