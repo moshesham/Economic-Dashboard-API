@@ -4,9 +4,11 @@ Use this index to navigate the project documentation.
 
 ## Strategic Planning & Roadmap
 
+- **`STRATEGIC_PLANNING_GUIDE.md`**: 🚀 **START HERE** - Quick navigation guide for all strategic documents
 - **`EXECUTIVE_SUMMARY.md`**: 📊 High-level project review, improvement priorities, and action plan
 - **`PROJECT_IMPROVEMENT_PLAN.md`**: 🔧 Detailed technical improvements across testing, monitoring, security, and performance
 - **`DATA_PRODUCTS_STRATEGY.md`**: 💰 Data product catalog, monetization, and exposure strategies
+- **`IMPLEMENTATION_CHECKLIST.md`**: ✅ Actionable checklist for tracking progress across all phases
 
 ## Getting Started
 
