@@ -157,6 +157,7 @@ class TestValidators:
         df = pd.DataFrame({
             'date': ['2023-12-01', '2023-11-01'],
             'indicator': ['RETAIL_SALES', 'RETAIL_SALES'],
+            'category': ['total', 'total'],
             'value': [500000.0, 495000.0],
         })
         
