@@ -252,11 +252,18 @@ REDIS_URL=redis://redis:6379/0
 
 ## Documentation
 
+### 📋 Strategic Planning
+- 📊 [Executive Summary](docs/EXECUTIVE_SUMMARY.md) - **Project review, priorities, and action plan**
+- 🔧 [Project Improvement Plan](docs/PROJECT_IMPROVEMENT_PLAN.md) - Detailed roadmap for enhancements
+- 💰 [Data Products Strategy](docs/DATA_PRODUCTS_STRATEGY.md) - Product catalog and monetization
+
+### 📚 Developer Guides
 - 📖 [Quick Reference Guide](docs/QUICK_REFERENCE.md) - Common tasks and examples
 - 📖 [Adding Data Sources](docs/ADDING_DATA_SOURCES.md) - Step-by-step guide
 - 📖 [Architecture Refactor Summary](docs/REFACTOR_SUMMARY.md) - What changed and why
 - 📖 [Deployment Checklist](docs/DEPLOYMENT_CHECKLIST.md) - Production deployment
 - 📖 [API Documentation](http://localhost:8000/docs) - Interactive API docs (when running)
+- 📖 [Full Documentation Index](docs/INDEX.md) - Complete list of all documentation
 
 ---
 
