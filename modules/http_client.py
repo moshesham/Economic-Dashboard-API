@@ -365,13 +365,109 @@ class NewsAPIClient(BaseAPIClient):
         return params, headers
 
 
+class WorldBankClient(BaseAPIClient):
+    """Client for World Bank API."""
+    
+    def __init__(self):
+        super().__init__(
+            base_url='https://api.worldbank.org/v2',
+            rate_limit=(120, 60),  # Conservative: 120 calls per minute
+        )
+    
+    def _add_auth(self, params: Optional[Dict] = None, headers: Optional[Dict] = None) -> tuple:
+        """Add World Bank format parameter."""
+        params = params or {}
+        headers = headers or {}
+        params['format'] = 'json'
+        params['per_page'] = '1000'  # Max records per page
+        return params, headers
+
+
+class IMFClient(BaseAPIClient):
+    """Client for IMF (International Monetary Fund) API."""
+    
+    def __init__(self):
+        super().__init__(
+            base_url='https://www.imf.org/external/datamapper/api/v1',
+            rate_limit=(60, 60),  # Conservative: 60 calls per minute
+        )
+
+
+class OECDClient(BaseAPIClient):
+    """Client for OECD (Organisation for Economic Co-operation and Development) API."""
+    
+    def __init__(self):
+        super().__init__(
+            base_url='https://stats.oecd.org/sdmx-json/data',
+            rate_limit=(100, 60),  # Conservative: 100 calls per minute
+        )
+
+
+class BLSClient(BaseAPIClient):
+    """Client for BLS (Bureau of Labor Statistics) API."""
+    
+    def __init__(self, api_key: Optional[str] = None):
+        # BLS API v2 requires registration but v1 doesn't
+        # v2 has higher rate limits with API key
+        super().__init__(
+            base_url='https://api.bls.gov/publicAPI/v2' if api_key else 'https://api.bls.gov/publicAPI/v1',
+            api_key=api_key,
+            rate_limit=(500, 86400) if api_key else (25, 86400),  # 500/day with key, 25/day without
+        )
+    
+    def _add_auth(self, params: Optional[Dict] = None, headers: Optional[Dict] = None) -> tuple:
+        """Add BLS API key to request body (for POST requests)."""
+        params = params or {}
+        headers = headers or {}
+        # BLS uses POST with JSON body, API key goes in the body
+        return params, headers
+
+
+class CensusBureauClient(BaseAPIClient):
+    """Client for US Census Bureau API."""
+    
+    def __init__(self, api_key: str):
+        super().__init__(
+            base_url='https://api.census.gov/data',
+            api_key=api_key,
+            rate_limit=(500, 86400),  # 500 calls per day
+        )
+    
+    def _add_auth(self, params: Optional[Dict] = None, headers: Optional[Dict] = None) -> tuple:
+        """Add Census API key to parameters."""
+        params = params or {}
+        headers = headers or {}
+        params['key'] = self.api_key
+        return params, headers
+
+
+class EIAClient(BaseAPIClient):
+    """Client for EIA (Energy Information Administration) API."""
+    
+    def __init__(self, api_key: str):
+        super().__init__(
+            base_url='https://api.eia.gov/v2',
+            api_key=api_key,
+            rate_limit=(5000, 3600),  # 5000 calls per hour
+        )
+    
+    def _add_auth(self, params: Optional[Dict] = None, headers: Optional[Dict] = None) -> tuple:
+        """Add EIA API key to query parameters."""
+        params = params or {}
+        headers = headers or {}
+        # EIA API v2 uses query parameter for API key
+        if self.api_key:
+            params['api_key'] = self.api_key
+        return params, headers
+
+
 # Factory function for creating clients
 def create_client(source: str, api_key: Optional[str] = None) -> BaseAPIClient:
     """
     Factory function to create appropriate API client.
     
     Args:
-        source: Data source name ('fred', 'yahoo', 'cboe', 'ici', 'news')
+        source: Data source name ('fred', 'yahoo', 'cboe', 'ici', 'news', 'worldbank', 'imf', 'oecd', 'bls', 'census', 'eia')
         api_key: API key if required
         
     Returns:
@@ -383,6 +479,12 @@ def create_client(source: str, api_key: Optional[str] = None) -> BaseAPIClient:
         'cboe': CBOEClient,
         'ici': ICIClient,
         'news': NewsAPIClient,
+        'worldbank': WorldBankClient,
+        'imf': IMFClient,
+        'oecd': OECDClient,
+        'bls': BLSClient,
+        'census': CensusBureauClient,
+        'eia': EIAClient,
     }
     
     source = source.lower()
@@ -392,9 +494,12 @@ def create_client(source: str, api_key: Optional[str] = None) -> BaseAPIClient:
     client_class = clients[source]
     
     # Check if API key is required
-    if source in ['fred', 'news']:
+    if source in ['fred', 'news', 'census', 'eia']:
         if not api_key:
             raise ValueError(f"{source.upper()} requires an API key")
+        return client_class(api_key)
+    elif source == 'bls':
+        # BLS API key is optional
         return client_class(api_key)
     else:
         return client_class()

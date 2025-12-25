@@ -14,6 +14,8 @@ import os
 from api.v1.routes import data, features, predictions, signals, portfolio, health, ingest
 from core.config import settings
 from core.logging import setup_logging
+from core.middleware import RequestLoggingMiddleware
+from core.cache import CacheMiddleware
 
 # Setup logging
 setup_logging()
@@ -35,6 +37,11 @@ async def lifespan(app: FastAPI):
         logger.info("Database connection established")
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
+    
+    # Log cache status
+    from core.cache import get_cache_stats
+    cache_stats = get_cache_stats()
+    logger.info(f"Cache status: {cache_stats}")
     
     yield
     
@@ -63,6 +70,9 @@ Use API key in header: `X-API-Key: your-api-key`
 ### Rate Limiting
 - Standard: 100 requests/minute
 - Premium: 1000 requests/minute
+
+### Caching
+GET requests are cached with Redis. Cache status is indicated in response headers via `X-Cache: HIT|MISS`.
     """,
     version="2.0.0",
     docs_url="/docs",
@@ -71,7 +81,8 @@ Use API key in header: `X-API-Key: your-api-key`
     lifespan=lifespan,
 )
 
-# Middleware
+# Middleware (order matters - first added is executed last)
+# 1. CORS (most outer)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -79,7 +90,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# 2. GZip compression
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+# 3. Request logging with correlation IDs
+app.add_middleware(RequestLoggingMiddleware)
+# 4. Response caching (most inner - executes first)
+app.add_middleware(CacheMiddleware)
 
 # Include routers
 app.include_router(health.router, tags=["Health"])

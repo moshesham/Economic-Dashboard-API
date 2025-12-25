@@ -295,6 +295,117 @@ def register_default_sources():
         tags=['ici', 'etf', 'flows'],
     ))
     
+    # World Bank Indicators
+    register_source(DataSourceConfig(
+        source_id='worldbank_indicators',
+        source_name='World Bank Economic Indicators',
+        source_type=DataSourceType.API,
+        frequency=DataFrequency.ANNUAL,
+        sla=timedelta(days=30),
+        fetch_function='modules.worldbank_data.refresh_worldbank_data',
+        fetch_params={},
+        table_name='worldbank_indicators',
+        validation_type='worldbank',
+        requires_api_key=False,
+        rate_limit=(120, 60),
+        cron_schedule='0 6 1 */3 *',  # First day of quarter at 6 AM
+        description='World Bank economic indicators for 217 countries',
+        tags=['worldbank', 'international', 'macro'],
+    ))
+    
+    # IMF Exchange Rates
+    register_source(DataSourceConfig(
+        source_id='imf_exchange_rates',
+        source_name='IMF Exchange Rates',
+        source_type=DataSourceType.API,
+        frequency=DataFrequency.ANNUAL,
+        sla=timedelta(days=30),
+        fetch_function='modules.imf_data.refresh_imf_data',
+        fetch_params={'include_weo': False},
+        table_name='imf_exchange_rates',
+        validation_type='imf_exchange_rates',
+        requires_api_key=False,
+        rate_limit=(60, 60),
+        cron_schedule='0 7 1 */3 *',  # First day of quarter at 7 AM
+        description='IMF exchange rates and international financial statistics',
+        tags=['imf', 'international', 'forex'],
+    ))
+    
+    # OECD Leading Indicators
+    register_source(DataSourceConfig(
+        source_id='oecd_cli',
+        source_name='OECD Composite Leading Indicator',
+        source_type=DataSourceType.API,
+        frequency=DataFrequency.MONTHLY,
+        sla=timedelta(days=7),
+        fetch_function='modules.oecd_data.refresh_oecd_data',
+        fetch_params={'include_productivity': False},
+        table_name='oecd_indicators',
+        validation_type='oecd',
+        requires_api_key=False,
+        rate_limit=(100, 60),
+        cron_schedule='0 8 15 * *',  # 15th of month at 8 AM
+        description='OECD leading indicators and productivity data for 38 countries',
+        tags=['oecd', 'international', 'leading_indicators'],
+    ))
+    
+    # BLS Employment & CPI
+    register_source(DataSourceConfig(
+        source_id='bls_data',
+        source_name='BLS Employment and CPI Data',
+        source_type=DataSourceType.API,
+        frequency=DataFrequency.MONTHLY,
+        sla=timedelta(days=7),
+        fetch_function='modules.bls_data.refresh_bls_data',
+        fetch_params={},
+        table_name='bls_data',
+        validation_type='bls',
+        requires_api_key=False,
+        api_key_env_var='BLS_API_KEY',
+        rate_limit=(25, 86400),  # 25/day without key, 500/day with key
+        cron_schedule='0 9 10 * *',  # 10th of month at 9 AM
+        description='BLS employment, CPI, wages - granular US labor data',
+        tags=['bls', 'us', 'employment', 'cpi'],
+    ))
+    
+    # Census Bureau Data
+    register_source(DataSourceConfig(
+        source_id='census_data',
+        source_name='Census Bureau Economic Indicators',
+        source_type=DataSourceType.API,
+        frequency=DataFrequency.MONTHLY,
+        sla=timedelta(days=7),
+        fetch_function='modules.census_data.refresh_census_data',
+        fetch_params={},
+        table_name='census_data',
+        validation_type='census',
+        requires_api_key=True,
+        api_key_env_var='CENSUS_API_KEY',
+        rate_limit=(500, 86400),
+        cron_schedule='0 10 15 * *',  # 15th of month at 10 AM
+        description='Census retail sales, housing starts, trade statistics',
+        tags=['census', 'us', 'retail', 'housing', 'trade'],
+    ))
+    
+    # EIA Energy Data
+    register_source(DataSourceConfig(
+        source_id='eia_data',
+        source_name='EIA Energy Data',
+        source_type=DataSourceType.API,
+        frequency=DataFrequency.WEEKLY,
+        sla=timedelta(days=2),
+        fetch_function='modules.eia_data.refresh_eia_data',
+        fetch_params={},
+        table_name='eia_data',
+        validation_type='eia',
+        requires_api_key=True,
+        api_key_env_var='EIA_API_KEY',
+        rate_limit=(5000, 3600),
+        cron_schedule='0 11 * * 4',  # Thursday at 11 AM (weekly)
+        description='EIA oil, gas, electricity prices and inventories',
+        tags=['eia', 'energy', 'oil', 'gas'],
+    ))
+    
     logger.info("Default data sources registered")
 
 
