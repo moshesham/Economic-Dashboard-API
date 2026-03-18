@@ -24,7 +24,7 @@ from modules.technical_analysis import (
     identify_support_resistance,
     get_trend_strength
 )
-from config_settings import is_offline_mode
+from core.config import is_offline_mode
 
 # Page configuration
 st.set_page_config(

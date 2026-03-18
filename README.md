@@ -6,6 +6,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-green.svg)](https://fastapi.tiangolo.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-blue.svg)](https://www.postgresql.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
+[![CI](https://github.com/moshesham/Economic-Dashboard-API/workflows/CI%20-%20Test%20%26%20Lint/badge.svg)](https://github.com/moshesham/Economic-Dashboard-API/actions)
+[![Security](https://github.com/moshesham/Economic-Dashboard-API/workflows/Security%20Scan/badge.svg)](https://github.com/moshesham/Economic-Dashboard-API/actions)
 
 ## 🎉 What's New - December 2025
 
@@ -17,7 +19,15 @@
 - ✅ **Unified HTTP Client** - Built-in rate limiting, retries, and error handling
 - ✅ **Data Validation** - Pandera schemas ensure data quality
 
-📖 **[Read the Full Refactor Summary](docs/REFACTOR_SUMMARY.md)**
+**Production-Grade Features (NEW):**
+- ✅ **API Response Caching** - Redis-based caching with automatic cache invalidation
+- ✅ **Centralized Logging** - Structured JSON logging with correlation IDs
+- ✅ **Request Tracking** - Full request tracing across distributed systems
+- ✅ **80% Test Coverage** - Comprehensive unit and integration tests
+- ✅ **Security Scanning** - Automated vulnerability scanning with CodeQL and Bandit
+
+📖 **[Read the Full Refactor Summary](docs/REFACTOR_SUMMARY.md)**  
+📖 **[Production Features Documentation](docs/PRODUCTION_FEATURES.md)**
 
 ---
 
@@ -111,12 +121,22 @@ curl http://localhost:8000/health
 ## Features
 
 ### 📊 Data Sources
+
+**Core Data Sources:**
 - **FRED** - Federal Reserve Economic Data (GDP, CPI, unemployment, interest rates)
 - **Yahoo Finance** - Stock OHLCV data for indices, ETFs, and individual stocks
 - **CBOE** - VIX volatility index and term structure
 - **ICI** - Investment Company Institute ETF flow statistics
 - **News API** - News articles for sentiment analysis
 - **SEC EDGAR** - Company filings, insider trading, fails-to-deliver
+
+**Open Data Sources (New):**
+- **World Bank** - 1,400+ economic indicators for 217 countries (GDP, inflation, trade, development)
+- **IMF** - Exchange rates, international financial statistics, World Economic Outlook
+- **OECD** - Leading indicators, productivity data for 38 member countries
+- **BLS** - US Bureau of Labor Statistics (employment, CPI, wages, granular labor data)
+- **Census Bureau** - Retail sales, housing starts, international trade statistics
+- **EIA** - Energy Information Administration (oil, gas, electricity prices and inventories)
 
 ### 📈 Analytics & Features
 - **Technical Indicators** - RSI, MACD, Bollinger Bands, ADX, ATR, Stochastic, MFI
@@ -140,6 +160,14 @@ curl http://localhost:8000/health
 - `GET /v1/features/technical` - Technical indicators
 - `GET /v1/predictions/latest` - Latest ML predictions
 - `GET /v1/signals/margin-risk` - Margin call risk assessment
+
+**Open Data Sources (New):**
+- `GET /v1/data/worldbank` - World Bank economic indicators
+- `GET /v1/data/imf/exchange-rates` - IMF exchange rates
+- `GET /v1/data/oecd` - OECD leading indicators and productivity
+- `GET /v1/data/bls` - BLS employment, CPI, wages
+- `GET /v1/data/census` - Census retail sales, housing, trade
+- `GET /v1/data/eia` - EIA energy prices and inventories
 
 ### Data Ingestion (Authentication Required)
 - `POST /v1/ingest/fred` - Ingest FRED data (JSON)
@@ -238,6 +266,11 @@ DUCKDB_PATH=./data/duckdb/economic_dashboard.duckdb
 FRED_API_KEY=your_fred_api_key
 NEWS_API_KEY=your_news_api_key
 ALPHA_VANTAGE_API_KEY=your_av_key
+
+# Open Data Sources API Keys (Optional/Required)
+BLS_API_KEY=your_bls_key  # Optional: 500/day with key, 25/day without
+CENSUS_API_KEY=your_census_key  # Required for Census Bureau data
+EIA_API_KEY=your_eia_key  # Required for EIA energy data
 
 # API Settings
 API_KEY_ENABLED=true

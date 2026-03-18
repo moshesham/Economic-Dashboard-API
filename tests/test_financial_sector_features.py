@@ -34,20 +34,11 @@ print("TEST 2: Database Schema Creation")
 print("-" * 80)
 
 try:
-    from modules.database.schema_legacy import (
-        create_financial_health_scores_table,
-        create_sector_rotation_analysis_table,
-        create_sector_relative_strength_table
-    )
+    from modules.database.schema_generator import create_all_tables
     
-    # Create tables
-    create_financial_health_scores_table()
-    print("✅ Created financial_health_scores table")
-    
-    create_sector_rotation_analysis_table()
-    print("✅ Created sector_rotation_analysis table")
-    
-    create_sector_relative_strength_table()
+    # Create all tables (includes financial health and sector rotation tables)
+    create_all_tables()
+    print("✅ Created all database tables including financial health and sector rotation tables")
     print("✅ Created sector_relative_strength table")
     
 except Exception as e:

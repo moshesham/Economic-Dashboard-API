@@ -20,27 +20,13 @@ print("=" * 60)
 print("\n[1/6] Testing database schema for margin risk tables...")
 try:
     from modules.database import get_db_connection
-    from modules.database.schema_legacy import (
-        create_leverage_metrics_table,
-        create_vix_term_structure_table,
-        create_leveraged_etf_data_table,
-        create_margin_call_risk_table
-    )
+    from modules.database.schema_generator import create_all_tables
     
     db = get_db_connection()
     
-    # Create tables
-    create_leverage_metrics_table()
-    print("  ✅ Created leverage_metrics table")
-    
-    create_vix_term_structure_table()
-    print("  ✅ Created vix_term_structure table")
-    
-    create_leveraged_etf_data_table()
-    print("  ✅ Created leveraged_etf_data table")
-    
-    create_margin_call_risk_table()
-    print("  ✅ Created margin_call_risk table")
+    # Create all tables (includes margin risk tables)
+    create_all_tables()
+    print("  ✅ Created all database tables including margin risk tables")
     
     # Verify tables exist
     tables_query = """
