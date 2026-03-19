@@ -368,7 +368,8 @@ class SectorRotationDetector:
             }
             
             df = pd.DataFrame([data])
-            self.db.insert_df(df, 'sector_rotation_analysis', if_exists='append')
+            self.db.insert_df(df, 'sector_rotation_analysis', if_exists='append',
+                             conflict_columns=['date'] if 'date' in df.columns else None)
             
         except Exception as e:
             logger.error(f"Error storing rotation data: {e}")

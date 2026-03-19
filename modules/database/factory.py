@@ -25,8 +25,9 @@ class DatabaseBackend(Protocol):
         """Execute a non-SELECT query."""
         ...
     
-    def insert_df(self, df: pd.DataFrame, table_name: str, if_exists: str = 'append') -> None:
-        """Insert a pandas DataFrame into a table."""
+    def insert_df(self, df: pd.DataFrame, table_name: str, if_exists: str = 'append',
+                  conflict_columns: Optional[list] = None) -> None:
+        """Insert a pandas DataFrame into a table with optional upsert."""
         ...
     
     def table_exists(self, table_name: str) -> bool:
@@ -135,8 +136,19 @@ class DuckDBBackend:
             self._connection.execute(sql)
         self._connection.commit()
     
-    def insert_df(self, df: pd.DataFrame, table_name: str, if_exists: str = 'append') -> None:
-        """Insert a pandas DataFrame into a table."""
+    def insert_df(self, df: pd.DataFrame, table_name: str, if_exists: str = 'append',
+                  conflict_columns: Optional[list] = None) -> None:
+        """Insert a pandas DataFrame into a table with optional upsert.
+        
+        Args:
+            df: DataFrame to insert.
+            table_name: Target table name.
+            if_exists: 'append' or 'replace'.
+            conflict_columns: Primary key columns for upsert. When provided,
+                uses INSERT OR REPLACE to avoid duplicate rows.
+        """
+        if df.empty:
+            return
         self._connection.register('temp_df', df)
         
         if if_exists == 'replace':
@@ -145,7 +157,11 @@ class DuckDBBackend:
             self.execute(f"CREATE TABLE {table_name} AS SELECT * FROM temp_df WHERE 1=0")
         
         columns = ', '.join(df.columns)
-        self.execute(f"INSERT INTO {table_name} ({columns}) SELECT {columns} FROM temp_df")
+        if conflict_columns:
+            # DuckDB INSERT OR REPLACE uses the primary key for deduplication
+            self.execute(f"INSERT OR REPLACE INTO {table_name} ({columns}) SELECT {columns} FROM temp_df")
+        else:
+            self.execute(f"INSERT INTO {table_name} ({columns}) SELECT {columns} FROM temp_df")
         self._connection.unregister('temp_df')
     
     def table_exists(self, table_name: str) -> bool:
@@ -256,28 +272,52 @@ class PostgreSQLBackend:
         finally:
             self._return_connection(conn)
     
-    def insert_df(self, df: pd.DataFrame, table_name: str, if_exists: str = 'append') -> None:
-        """Insert a pandas DataFrame into a table using bulk insert."""
+    def insert_df(self, df: pd.DataFrame, table_name: str, if_exists: str = 'append',
+                  conflict_columns: Optional[list] = None) -> None:
+        """Insert a pandas DataFrame into a table with optional upsert.
+        
+        Args:
+            df: DataFrame to insert.
+            table_name: Target table name.
+            if_exists: 'append' or 'replace'.
+            conflict_columns: Primary key columns for upsert via ON CONFLICT DO UPDATE.
+        """
         if df.empty:
             return
         
         if if_exists == 'replace':
             self.execute(f"TRUNCATE TABLE {table_name}")
         
-        # Use pandas to_sql for efficient bulk insert
         from sqlalchemy import create_engine
-        engine = create_engine(self.connection_url)
         
-        df.to_sql(
-            table_name,
-            engine,
-            if_exists='append',
-            index=False,
-            method='multi',
-            chunksize=1000
-        )
-        
-        engine.dispose()
+        if conflict_columns:
+            from sqlalchemy import MetaData, Table
+            from sqlalchemy.dialects.postgresql import insert
+            
+            engine = create_engine(self.connection_url)
+            metadata = MetaData()
+            table = Table(table_name, metadata, autoload_with=engine)
+            update_cols = {c: getattr(insert(table).excluded, c)
+                          for c in df.columns if c not in conflict_columns}
+            records = df.to_dict(orient='records')
+            with engine.begin() as conn:
+                for i in range(0, len(records), 1000):
+                    chunk = records[i:i + 1000]
+                    stmt = insert(table).values(chunk)
+                    if update_cols:
+                        stmt = stmt.on_conflict_do_update(
+                            index_elements=conflict_columns, set_=update_cols)
+                    else:
+                        stmt = stmt.on_conflict_do_nothing(index_elements=conflict_columns)
+                    conn.execute(stmt)
+            engine.dispose()
+        else:
+            engine = create_engine(self.connection_url)
+            df.to_sql(
+                table_name, engine, if_exists='append',
+                index=False, method='multi', chunksize=1000
+            )
+            engine.dispose()
     
     def table_exists(self, table_name: str) -> bool:
         """Check if a table exists."""
@@ -343,9 +383,10 @@ class DatabaseConnection:
         """Execute a non-SELECT query."""
         return self._backend.execute(sql, params)
     
-    def insert_df(self, df: pd.DataFrame, table_name: str, if_exists: str = 'append') -> None:
+    def insert_df(self, df: pd.DataFrame, table_name: str, if_exists: str = 'append',
+                  conflict_columns: Optional[list] = None) -> None:
         """Insert a pandas DataFrame into a table."""
-        return self._backend.insert_df(df, table_name, if_exists)
+        return self._backend.insert_df(df, table_name, if_exists, conflict_columns=conflict_columns)
     
     def table_exists(self, table_name: str) -> bool:
         """Check if a table exists."""

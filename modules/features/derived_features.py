@@ -320,7 +320,8 @@ class DerivedFeaturesCalculator:
             return
         
         try:
-            self.db.insert_df(df, 'derived_features', if_exists='append')
+            self.db.insert_df(df, 'derived_features', if_exists='append',
+                             conflict_columns=['ticker', 'date'])
             print(f"✅ Stored derived features: {len(df)} records")
         except Exception as e:
             print(f"❌ Error storing derived features: {e}")

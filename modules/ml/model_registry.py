@@ -173,7 +173,8 @@ class ModelRegistry:
                     ))
             else:
                 # DuckDB fallback (simple insert or replace)
-                db.insert_df(row, 'model_registry', if_exists='append')
+                db.insert_df(row, 'model_registry', if_exists='append',
+                             conflict_columns=['model_id'])
             
             logger.info(f"Persisted model metadata to database: {metadata.model_id}")
         except Exception as e:

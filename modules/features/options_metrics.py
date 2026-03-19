@@ -243,7 +243,8 @@ class OptionsMetricsCalculator:
             df_insert = df_insert[available_cols]
             
             # Insert into database
-            self.db.insert_df(df_insert, 'options_data', if_exists='append')
+            self.db.insert_df(df_insert, 'options_data', if_exists='append',
+                             conflict_columns=['ticker', 'date', 'expiration_date'])
             
             print(f"✅ Stored options data: {len(df_insert)} records")
             
