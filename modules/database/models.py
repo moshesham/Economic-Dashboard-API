@@ -390,6 +390,29 @@ class ModelRegistry(Base):
 # Ops / Monitoring Tables
 # =============================================================================
 
+class DataIngestionWatermark(Base):
+    """
+    Tracks the high-water mark (last successfully ingested date) for each
+    data source + series combination.  Enables true incremental fetching so
+    only *new* records are pulled on each refresh cycle instead of a
+    full historical reload.
+    """
+    __tablename__ = 'data_ingestion_watermarks'
+
+    source = Column(String, nullable=False)          # e.g. 'fred', 'yfinance', 'bls'
+    series_key = Column(String, nullable=False)       # e.g. 'UNRATE', '^GSPC', '__all__'
+    last_fetched_date = Column(Date, nullable=False)  # Latest data point stored
+    last_run_at = Column(DateTime, default=func.now())  # Wall-clock time of last run
+    records_fetched = Column(Integer, default=0)
+    status = Column(String, default='ok')             # 'ok' | 'error'
+    error_message = Column(String)
+
+    __table_args__ = (
+        PrimaryKeyConstraint('source', 'series_key'),
+        Index('idx_watermark_source', 'source'),
+    )
+
+
 class DataRefreshLog(Base):
     """Data refresh operation log"""
     __tablename__ = 'data_refresh_log'

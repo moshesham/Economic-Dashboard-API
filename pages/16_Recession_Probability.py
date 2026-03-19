@@ -5,8 +5,10 @@ A comprehensive view of US recession probability using multiple economic indicat
 This page provides:
 - Current recession probability with risk level assessment
 - Individual indicator signals and their contributions
-- Historical recession probability chart
+- Historical recession probability chart (rolling 60-day window)
+- Risk decomposition waterfall chart
 - Key indicator visualizations
+- Export to CSV
 - Detailed explanations of methodology
 """
 
@@ -21,12 +23,15 @@ from modules.ml.recession_model import (
     get_recession_indicator_series,
     INDICATOR_WEIGHTS
 )
-
-st.set_page_config(
-    page_title="Recession Probability Monitor",
-    page_icon="📉",
-    layout="wide"
+from core.page_components import (
+    configure_page,
+    render_page_header,
+    render_offline_badge,
+    render_download_csv_button,
+    render_plotly_card,
 )
+
+configure_page("Recession Probability Monitor", icon="📉")
 
 # Custom CSS
 st.markdown("""
@@ -451,7 +456,138 @@ if data_loaded:
                 st.markdown(explanations.get('consumer_signal', ''))
         
         st.divider()
-        
+
+        # === HISTORICAL PROBABILITY CHART ===
+        st.subheader("📈 Historical Recession Probability")
+        st.caption("Rolling 60-day recession probability estimate based on current indicator weights")
+
+        @st.cache_data(ttl=3600)
+        def compute_historical_probability(fred_df: pd.DataFrame) -> pd.DataFrame:
+            """
+            Re-run the model over a rolling window to produce a history of
+            recession probability estimates.  Uses monthly frequency to keep
+            computation tractable.
+            """
+            model_hist = RecessionProbabilityModel()
+            records = []
+            # Sample at monthly frequency over available data (last 10 years)
+            if fred_df.empty:
+                return pd.DataFrame()
+            start = fred_df.index.min()
+            end = fred_df.index.max()
+            dates = pd.date_range(start=max(start, end - pd.DateOffset(years=10)),
+                                  end=end, freq="MS")
+            for as_of in dates:
+                slice_df = fred_df[fred_df.index <= as_of]
+                if len(slice_df) < 60:
+                    continue
+                try:
+                    model_hist.load_indicators_from_data(slice_df)
+                    r = model_hist.calculate_recession_probability()
+                    records.append({"date": as_of, "probability": r["probability"]})
+                except Exception:
+                    continue
+            return pd.DataFrame(records).set_index("date") if records else pd.DataFrame()
+
+        hist_df = compute_historical_probability(fred_data)
+
+        if not hist_df.empty:
+            fig_hist = go.Figure()
+            # Shaded risk bands
+            for band_min, band_max, band_color, band_label in [
+                (0.0, 0.20, "rgba(39,174,96,0.10)", "Low"),
+                (0.20, 0.40, "rgba(241,196,15,0.10)", "Moderate"),
+                (0.40, 0.70, "rgba(243,156,18,0.12)", "Elevated"),
+                (0.70, 1.00, "rgba(231,76,60,0.12)", "High"),
+            ]:
+                fig_hist.add_hrect(y0=band_min, y1=band_max,
+                                   fillcolor=band_color, line_width=0,
+                                   annotation_text=band_label,
+                                   annotation_position="top right")
+            fig_hist.add_trace(go.Scatter(
+                x=hist_df.index, y=hist_df["probability"],
+                mode="lines", name="Recession Probability",
+                line=dict(color="#e74c3c", width=2),
+                fill="tozeroy", fillcolor="rgba(231,76,60,0.15)",
+            ))
+            fig_hist.update_layout(
+                template="plotly_dark",
+                yaxis_tickformat=".0%",
+                yaxis_title="Probability",
+                height=320,
+                margin=dict(l=20, r=20, t=10, b=20),
+                showlegend=False,
+                hovermode="x unified",
+            )
+            st.plotly_chart(fig_hist, use_container_width=True)
+        else:
+            st.info("Historical probability chart requires sufficient data range.")
+
+        st.divider()
+
+        # === RISK DECOMPOSITION WATERFALL ===
+        st.subheader("🧩 Risk Decomposition")
+        st.caption("Weighted contribution of each signal to the overall recession probability")
+        decomp_measures, decomp_values, decomp_labels = [], [], []
+        running = 0.0
+        for sig_name, sig_val in signals.items():
+            weight = INDICATOR_WEIGHTS.get(sig_name, 0)
+            contribution = sig_val * weight
+            decomp_labels.append(sig_name.replace("_signal", "").replace("_", " ").title())
+            decomp_values.append(round(contribution, 4))
+            decomp_measures.append("relative")
+            running += contribution
+        decomp_labels.append("Total")
+        decomp_values.append(round(running, 4))
+        decomp_measures.append("total")
+
+        fig_wf = go.Figure(go.Waterfall(
+            orientation="h",
+            measure=decomp_measures,
+            y=decomp_labels,
+            x=decomp_values,
+            connector={"line": {"color": "rgba(255,255,255,0.2)"}},
+            increasing={"marker": {"color": "#e74c3c"}},
+            decreasing={"marker": {"color": "#27ae60"}},
+            totals={"marker": {"color": "#0068c9"}},
+            texttemplate="%{x:.1%}",
+            textposition="outside",
+        ))
+        fig_wf.update_layout(
+            template="plotly_dark",
+            xaxis_tickformat=".0%",
+            height=300,
+            margin=dict(l=0, r=60, t=10, b=20),
+        )
+        st.plotly_chart(fig_wf, use_container_width=True)
+
+        st.divider()
+
+        # === EXPORT ===
+        export_rows = []
+        for sig_name, sig_val in signals.items():
+            weight = INDICATOR_WEIGHTS.get(sig_name, 0)
+            export_rows.append({
+                "Indicator": sig_name.replace("_signal", "").replace("_", " ").title(),
+                "Signal Strength": f"{sig_val:.1%}",
+                "Weight": f"{weight:.0%}",
+                "Weighted Contribution": f"{sig_val * weight:.1%}",
+            })
+        export_df = pd.DataFrame(export_rows)
+        export_df.loc[len(export_df)] = {
+            "Indicator": "TOTAL",
+            "Signal Strength": "",
+            "Weight": "",
+            "Weighted Contribution": f"{probability:.1%}",
+        }
+        render_download_csv_button(
+            export_df,
+            filename=f"recession_probability_{datetime.now().strftime('%Y%m%d')}.csv",
+            label="⬇️ Export Signal Breakdown (CSV)",
+        )
+
+        st.divider()
+
         # === METHODOLOGY ===
         with st.expander("📚 Methodology & Disclaimer"):
             st.markdown("""
