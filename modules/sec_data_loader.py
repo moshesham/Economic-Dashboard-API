@@ -624,7 +624,8 @@ def save_financial_statements_to_db(fsds_data: Dict[str, pd.DataFrame],
         num_df['data_quarter'] = quarter
         
         try:
-            db.insert_df(num_df, 'sec_financial_statements', if_exists='append')
+            db.insert_df(num_df, 'sec_financial_statements', if_exists='append',
+                         conflict_columns=['adsh', 'tag', 'ddate'] if {'adsh', 'tag', 'ddate'}.issubset(num_df.columns) else None)
             total_records += len(num_df)
         except Exception as e:
             st.warning(f"Could not save numeric data: {e}")
@@ -636,7 +637,8 @@ def save_financial_statements_to_db(fsds_data: Dict[str, pd.DataFrame],
         sub_df['data_quarter'] = quarter
         
         try:
-            db.insert_df(sub_df, 'sec_submissions', if_exists='append')
+            db.insert_df(sub_df, 'sec_submissions', if_exists='append',
+                         conflict_columns=['adsh'] if 'adsh' in sub_df.columns else None)
             total_records += len(sub_df)
         except Exception as e:
             st.warning(f"Could not save submission data: {e}")
@@ -669,7 +671,8 @@ def save_company_facts_to_db(cik: str, company_facts: Dict) -> int:
     key_financials['cik'] = cik
     
     try:
-        db.insert_df(key_financials, 'sec_company_facts', if_exists='append')
+        db.insert_df(key_financials, 'sec_company_facts', if_exists='append',
+                     conflict_columns=['cik', 'concept', 'end_date'] if {'cik', 'concept', 'end_date'}.issubset(key_financials.columns) else None)
         return len(key_financials)
     except Exception as e:
         st.warning(f"Could not save company facts: {e}")

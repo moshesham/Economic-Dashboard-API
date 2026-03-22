@@ -36,6 +36,29 @@ default_args = {
 }
 
 
+def run_data_refresh_incremental():
+    """
+    Execute a true incremental refresh using database watermarks.
+
+    Only fetches records newer than the last stored high-water mark for
+    each series, making each scheduled run fast even for wide series
+    catalogs.
+    """
+    import subprocess
+    result = subprocess.run(
+        ["python", "scripts/refresh_data_smart.py", "--incremental"],
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise Exception(
+            f"Incremental refresh failed:\n{result.stdout}\n{result.stderr}"
+        )
+    print(result.stdout)
+    return "Incremental refresh completed successfully"
+
+
 def run_data_refresh():
     """Execute the data refresh script."""
     from scripts.refresh_data import main
@@ -120,13 +143,20 @@ with DAG(
         bash_command='mkdir -p data/cache data/backups',
     )
     
-    # Task 2: Run data refresh
+    # Task 2: Incremental watermark-based refresh (fast, only new records)
+    incremental_refresh = PythonOperator(
+        task_id='incremental_data_refresh',
+        python_callable=run_data_refresh_incremental,
+    )
+
+    # Task 3 (fallback): Full SLA-based refresh for backward compat
     refresh_data = PythonOperator(
         task_id='refresh_economic_data',
         python_callable=run_data_refresh,
+        # Only runs if incremental refresh is skipped / failed upstream
     )
-    
-    # Task 3: Validate data quality
+
+    # Task 4: Validate data quality
     validate_data = PythonOperator(
         task_id='validate_data_quality',
         python_callable=validate_data_quality,
@@ -145,7 +175,8 @@ with DAG(
     )
     
     # Define task dependencies
-    create_dirs >> refresh_data >> validate_data >> cleanup_old_backups >> notify_success
+    # Incremental path: create_dirs → incremental → validate → cleanup → notify
+    create_dirs >> incremental_refresh >> validate_data >> cleanup_old_backups >> notify_success
 
 
 # Optional: Create a separate DAG for weekly full refresh with extended history

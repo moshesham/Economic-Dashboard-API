@@ -204,7 +204,8 @@ def save_ici_etf_flows_to_duckdb(weekly_df: Optional[pd.DataFrame] = None,
             weekly_clean = weekly_df.copy()
             weekly_clean['week_ending'] = pd.to_datetime(weekly_clean['week_ending'])
             
-            db.insert_df(weekly_clean, 'ici_etf_weekly_flows', if_exists='append')
+            db.insert_df(weekly_clean, 'ici_etf_weekly_flows', if_exists='append',
+                         conflict_columns=['week_ending', 'fund_type'])
             results['weekly_records'] = len(weekly_clean)
             print(f"Saved {len(weekly_clean)} weekly ETF flow records to DuckDB")
         except Exception as e:
@@ -218,7 +219,8 @@ def save_ici_etf_flows_to_duckdb(weekly_df: Optional[pd.DataFrame] = None,
             monthly_clean = monthly_df.copy()
             monthly_clean['date'] = pd.to_datetime(monthly_clean['date'])
             
-            db.insert_df(monthly_clean, 'ici_etf_flows', if_exists='append')
+            db.insert_df(monthly_clean, 'ici_etf_flows', if_exists='append',
+                         conflict_columns=['date', 'fund_category'])
             results['monthly_records'] = len(monthly_clean)
             print(f"Saved {len(monthly_clean)} monthly ETF flow records to DuckDB")
         except Exception as e:

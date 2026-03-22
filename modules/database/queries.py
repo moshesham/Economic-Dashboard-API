@@ -281,7 +281,8 @@ def insert_fred_data(df: pd.DataFrame) -> int:
     df['date'] = pd.to_datetime(df['date'])
     df['value'] = pd.to_numeric(df['value'], errors='coerce')
     
-    db.insert_df(df[['series_id', 'date', 'value']], 'fred_data', if_exists='append')
+    db.insert_df(df[['series_id', 'date', 'value']], 'fred_data', if_exists='append',
+                 conflict_columns=['series_id', 'date'])
     
     return len(df)
 
@@ -310,7 +311,8 @@ def insert_stock_data(df: pd.DataFrame) -> int:
     if 'volume' in df.columns:
         df['volume'] = pd.to_numeric(df['volume'], errors='coerce').fillna(0).astype(int)
     
-    db.insert_df(df, 'yfinance_ohlcv', if_exists='append')
+    db.insert_df(df, 'yfinance_ohlcv', if_exists='append',
+                 conflict_columns=['ticker', 'date'])
     
     return len(df)
 
@@ -332,7 +334,8 @@ def insert_options_data(df: pd.DataFrame) -> int:
     df['date'] = pd.to_datetime(df['date'])
     df['expiration_date'] = pd.to_datetime(df['expiration_date'])
     
-    db.insert_df(df, 'options_data', if_exists='append')
+    db.insert_df(df, 'options_data', if_exists='append',
+                 conflict_columns=['ticker', 'date', 'expiration_date'])
     
     return len(df)
 
@@ -361,7 +364,8 @@ def insert_predictions(df: pd.DataFrame) -> int:
             lambda x: json.dumps(x) if isinstance(x, dict) else x
         )
     
-    db.insert_df(df, 'ml_predictions', if_exists='append')
+    db.insert_df(df, 'ml_predictions', if_exists='append',
+                 conflict_columns=['ticker', 'prediction_date', 'model_version'])
     
     return len(df)
 
@@ -496,7 +500,8 @@ def insert_technical_features(df: pd.DataFrame) -> int:
     df = df.copy()
     df['date'] = pd.to_datetime(df['date'])
     
-    db.insert_df(df, 'technical_features', if_exists='append')
+    db.insert_df(df, 'technical_features', if_exists='append',
+                 conflict_columns=['ticker', 'date'])
     
     return len(df)
 
@@ -782,7 +787,8 @@ def insert_sec_filings(df: pd.DataFrame) -> int:
     if 'report_date' in df.columns:
         df['report_date'] = pd.to_datetime(df['report_date'])
     
-    db.insert_df(df, 'sec_filings', if_exists='append')
+    db.insert_df(df, 'sec_filings', if_exists='append',
+                 conflict_columns=['accession_number'] if 'accession_number' in df.columns else None)
     
     return len(df)
 
@@ -805,7 +811,8 @@ def insert_sec_company_facts(df: pd.DataFrame) -> int:
     if 'filed' in df.columns:
         df['filed'] = pd.to_datetime(df['filed'])
     
-    db.insert_df(df, 'sec_company_facts', if_exists='append')
+    db.insert_df(df, 'sec_company_facts', if_exists='append',
+                 conflict_columns=['cik', 'concept', 'end_date'] if {'cik', 'concept', 'end_date'}.issubset(df.columns) else None)
     
     return len(df)
 
@@ -826,7 +833,8 @@ def insert_sec_fails_to_deliver(df: pd.DataFrame) -> int:
     if 'settlement_date' in df.columns:
         df['settlement_date'] = pd.to_datetime(df['settlement_date'])
     
-    db.insert_df(df, 'sec_fails_to_deliver', if_exists='append')
+    db.insert_df(df, 'sec_fails_to_deliver', if_exists='append',
+                 conflict_columns=['settlement_date', 'cusip'] if {'settlement_date', 'cusip'}.issubset(df.columns) else None)
     
     return len(df)
 
@@ -961,7 +969,8 @@ def insert_ici_weekly_flows(df: pd.DataFrame) -> int:
     df = df.copy()
     df['week_ending'] = pd.to_datetime(df['week_ending'])
     
-    db.insert_df(df, 'ici_etf_weekly_flows', if_exists='append')
+    db.insert_df(df, 'ici_etf_weekly_flows', if_exists='append',
+                 conflict_columns=['week_ending', 'fund_type'])
     
     return len(df)
 
@@ -981,7 +990,8 @@ def insert_ici_monthly_flows(df: pd.DataFrame) -> int:
     df = df.copy()
     df['date'] = pd.to_datetime(df['date'])
     
-    db.insert_df(df, 'ici_etf_flows', if_exists='append')
+    db.insert_df(df, 'ici_etf_flows', if_exists='append',
+                 conflict_columns=['date', 'fund_category'])
     
     return len(df)
 
@@ -1066,7 +1076,8 @@ def insert_cboe_vix_data(df: pd.DataFrame) -> int:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
-    db.insert_df(df, 'cboe_vix_history', if_exists='append')
+    db.insert_df(df, 'cboe_vix_history', if_exists='append',
+                 conflict_columns=['date'])
     
     return len(df)
 
@@ -1088,7 +1099,8 @@ def insert_cboe_vix_term_structure(df: pd.DataFrame) -> int:
     if 'expiration_date' in df.columns:
         df['expiration_date'] = pd.to_datetime(df['expiration_date'])
     
-    db.insert_df(df, 'cboe_vix_term_structure', if_exists='append')
+    db.insert_df(df, 'cboe_vix_term_structure', if_exists='append',
+                 conflict_columns=['date', 'days_to_expiration'])
     
     return len(df)
 

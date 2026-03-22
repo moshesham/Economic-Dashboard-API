@@ -239,26 +239,43 @@ async def get_recession_probability():
     - Consumer indicators (10% weight)
     - Housing market (10% weight)
     - Market signals (5% weight)
-    
+
     Returns:
-        Recession probability with component breakdown
+        Recession probability with component breakdown and indicator signals.
     """
     try:
-        from modules.ml.recession_model import RecessionModel
-        
-        model = RecessionModel()
+        from modules.ml.recession_model import (
+            RecessionProbabilityModel,
+            get_recession_indicator_series,
+            INDICATOR_WEIGHTS,
+        )
+        from modules.data_loader import load_fred_data, load_yfinance_data
+
+        series_ids = get_recession_indicator_series()
+        fred_data = load_fred_data(series_ids)
+        if fred_data is None or fred_data.empty:
+            raise HTTPException(status_code=503, detail="FRED data unavailable")
+
+        market_data = load_yfinance_data({"S&P 500": "^GSPC"}, period="2y")
+        sp500 = market_data.get("S&P 500", None)
+
+        model = RecessionProbabilityModel()
+        model.load_indicators_from_data(fred_data, sp500)
         result = model.calculate_recession_probability()
-        
+
         return {
             "probability": result.get("probability"),
             "risk_level": result.get("risk_level"),
-            "components": result.get("components"),
-            "historical_accuracy": result.get("historical_accuracy"),
+            "signals": result.get("signals", {}),
+            "indicator_weights": INDICATOR_WEIGHTS,
+            "details": result.get("details", {}),
             "last_updated": datetime.utcnow().isoformat(),
         }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # ============================================================================

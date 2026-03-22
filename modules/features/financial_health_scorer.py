@@ -380,7 +380,8 @@ class FinancialHealthScorer:
             }
             
             df = pd.DataFrame([data])
-            self.db.insert_df(df, 'financial_health_scores', if_exists='append')
+            self.db.insert_df(df, 'financial_health_scores', if_exists='append',
+                             conflict_columns=['ticker', 'date'] if {'ticker', 'date'}.issubset(df.columns) else None)
             
         except Exception as e:
             logger.error(f"Error storing health scores: {e}")

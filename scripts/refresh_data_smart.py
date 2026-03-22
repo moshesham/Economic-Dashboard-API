@@ -267,24 +267,98 @@ def save_to_csv_backup(data, csv_filename: str):
         print(f"  📄 Backup saved to {csv_file.replace('.csv', '_*.csv')}")
 
 
+def run_incremental_refresh(series_filter: list | None = None, sources: list | None = None):
+    """
+    Perform a true incremental refresh using database watermarks.
+
+    Only fetches records newer than the last high-water mark for each
+    series, making repeated runs cheap even for large series catalogs.
+
+    Args:
+        series_filter: Optional list of specific FRED series IDs or
+                       yfinance tickers to refresh.  Defaults to all
+                       configured series.
+        sources: List of sources to refresh, e.g. ['fred', 'yfinance'].
+                 Defaults to both.
+    """
+    from modules.ingestion import get_incremental_fetcher
+    from modules.data_series_config import get_all_fred_series, get_all_yfinance_tickers
+
+    fetcher = get_incremental_fetcher()
+    sources = sources or ["fred", "yfinance"]
+
+    print("\n🔄 Incremental refresh (watermark-based)")
+
+    if "fred" in sources:
+        all_fred = get_all_fred_series()          # {label: series_id}
+        if series_filter:
+            all_fred = {k: v for k, v in all_fred.items() if v in series_filter or k in series_filter}
+        print(f"\n📥 FRED incremental: {len(all_fred)} series")
+        for label, series_id in all_fred.items():
+            wm = fetcher.get_watermark("fred", series_id)
+            df = fetcher.fetch_fred_incremental(series_id)
+            if not df.empty:
+                print(f"  ✅ {label} ({series_id}): +{len(df)} rows (prev watermark: {wm})")
+            else:
+                print(f"  ⏭  {label} ({series_id}): up-to-date")
+
+    if "yfinance" in sources:
+        all_yf = get_all_yfinance_tickers()       # {label: ticker}
+        if series_filter:
+            all_yf = {k: v for k, v in all_yf.items() if v in series_filter or k in series_filter}
+        print(f"\n📥 yFinance incremental: {len(all_yf)} tickers")
+        for label, ticker in all_yf.items():
+            wm = fetcher.get_watermark("yfinance", ticker)
+            df = fetcher.fetch_yfinance_incremental(ticker)
+            if not df.empty:
+                print(f"  ✅ {label} ({ticker}): +{len(df)} rows (prev watermark: {wm})")
+            else:
+                print(f"  ⏭  {label} ({ticker}): up-to-date")
+
+    print("\n📋 Watermark status:")
+    wm_df = fetcher.get_all_watermarks()
+    if not wm_df.empty:
+        print(wm_df.to_string(index=False))
+    else:
+        print("  (no watermarks recorded yet — database may be unavailable)")
+
+
 def main():
     """Main data refresh pipeline with smart frequency-based updates."""
     parser = argparse.ArgumentParser(description='Smart Economic Data Refresh')
     parser.add_argument('--force', action='store_true', help='Force refresh all data regardless of SLA')
-    parser.add_argument('--frequency', choices=['daily', 'weekly', 'monthly', 'quarterly', 'all'], 
+    parser.add_argument('--frequency', choices=['daily', 'weekly', 'monthly', 'quarterly', 'all'],
                        default='all', help='Only refresh specific frequency')
     parser.add_argument('--test', action='store_true', help='Test mode: fetch only 2 series from each frequency')
+    parser.add_argument(
+        '--incremental', action='store_true',
+        help='Use true incremental/watermark-based fetch (only new records). '
+             'Recommended for scheduled runs after initial history load.'
+    )
+    parser.add_argument(
+        '--series', nargs='*', default=None,
+        help='With --incremental: limit to specific series IDs or labels.'
+    )
     args = parser.parse_args()
     
     print("=" * 70)
     print("Economic Dashboard - Smart Data Refresh")
     print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"Mode: {'FORCE REFRESH' if args.force else 'SLA-BASED'}")
+    if args.incremental:
+        print("Mode: INCREMENTAL (watermark-based — fetches only new records)")
+    else:
+        print(f"Mode: {'FORCE REFRESH' if args.force else 'SLA-BASED'}")
     if args.test:
         print("⚠️  TEST MODE: Limited series fetch")
     print("=" * 70)
-    
+
     try:
+        # ── Incremental mode ──────────────────────────────────────────────
+        if args.incremental:
+            run_incremental_refresh(series_filter=args.series)
+            print(f"\n✅ Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            return 0
+        # ── SLA-based (original) mode ─────────────────────────────────────
         # Determine which frequencies to refresh
         if args.frequency == 'all':
             fred_frequencies = ['daily', 'weekly', 'monthly', 'quarterly']

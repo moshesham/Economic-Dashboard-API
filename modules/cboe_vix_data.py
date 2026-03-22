@@ -195,7 +195,8 @@ def save_cboe_vix_to_duckdb(vix_df: Optional[pd.DataFrame] = None) -> dict:
         for col in ['open', 'high', 'low', 'close']:
             vix_clean[col] = pd.to_numeric(vix_clean[col], errors='coerce')
         
-        db.insert_df(vix_clean, 'cboe_vix_history', if_exists='append')
+        db.insert_df(vix_clean, 'cboe_vix_history', if_exists='append',
+                     conflict_columns=['date'])
         results['vix_records'] = len(vix_clean)
         print(f"Saved {len(vix_clean)} VIX records to DuckDB")
         
