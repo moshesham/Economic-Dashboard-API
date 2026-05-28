@@ -29,6 +29,7 @@ from .queries import (
     insert_sec_company_facts,
     insert_sec_fails_to_deliver,
     get_sec_data_freshness,
+    get_monitored_tickers,
 )
 
 __all__ = [
@@ -56,4 +57,5 @@ __all__ = [
     'insert_sec_company_facts',
     'insert_sec_fails_to_deliver',
     'get_sec_data_freshness',
+    'get_monitored_tickers',
 ]

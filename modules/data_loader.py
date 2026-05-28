@@ -3,10 +3,33 @@ Data loading module for Economic Dashboard.
 Handles all data fetching from FRED and Yahoo Finance with DuckDB caching and offline support.
 """
 
-import streamlit as st
+try:
+    import streamlit as st
+    _STREAMLIT_AVAILABLE = True
+except ImportError:
+    _STREAMLIT_AVAILABLE = False
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+
+    class _StStub:
+        def warning(self, *a, **kw): _log.warning(*a)
+        def error(self, *a, **kw): _log.error(*a)
+        def info(self, *a, **kw): _log.info(*a)
+        @staticmethod
+        def cache_data(ttl=None):
+            def decorator(fn):
+                return fn
+            return decorator
+
+    st = _StStub()
 import pandas as pd
 import yfinance as yf
-from pandas_datareader import data as pdr
+try:
+    from pandas_datareader import data as pdr
+    _PDR_AVAILABLE = True
+except (ImportError, TypeError):
+    pdr = None
+    _PDR_AVAILABLE = False
 from datetime import datetime, timedelta
 import os
 import pickle

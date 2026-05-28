@@ -11,13 +11,21 @@ Comprehensive machine learning toolkit including:
 - Recession Modeling: Economic indicator-based probability models
 """
 
-from .models import XGBoostModel, LightGBMModel, EnsembleModel
-from .training import ModelTrainer
-from .prediction import PredictionEngine
-from .evaluation import ModelEvaluator
+try:
+    from .models import XGBoostModel, LightGBMModel, EnsembleModel
+    from .training import ModelTrainer
+    from .prediction import PredictionEngine
+    from .evaluation import ModelEvaluator
+    from .feature_engineering import FeatureEngineer, FeatureConfig
+    from .hyperparameter_tuning import HyperparameterOptimizer, OptimizationConfig, optimize_model_hyperparameters
+except ImportError:
+    # ML dependencies (xgboost, lightgbm, sklearn) not installed in this environment
+    XGBoostModel = LightGBMModel = EnsembleModel = None
+    ModelTrainer = PredictionEngine = ModelEvaluator = None
+    FeatureEngineer = FeatureConfig = None
+    HyperparameterOptimizer = OptimizationConfig = optimize_model_hyperparameters = None
+
 from .recession_model import RecessionProbabilityModel
-from .feature_engineering import FeatureEngineer, FeatureConfig
-from .hyperparameter_tuning import HyperparameterOptimizer, OptimizationConfig, optimize_model_hyperparameters
 
 __all__ = [
     # Core Models

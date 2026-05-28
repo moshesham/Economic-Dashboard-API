@@ -53,7 +53,10 @@ async def get_technical_features(
             # Try to calculate on-demand if not cached
             from modules.features.technical_indicators import TechnicalIndicatorCalculator
             calc = TechnicalIndicatorCalculator()
-            df = calc.calculate_all_indicators(ticker.upper())
+            try:
+                df = calc.calculate_all_indicators(ticker.upper())
+            except ValueError as ve:
+                raise HTTPException(status_code=404, detail=str(ve))
             
             if df.empty:
                 raise HTTPException(

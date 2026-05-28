@@ -40,17 +40,13 @@ docs/
 *.md
 !README.md
 
-# Tests (include in dev, exclude in prod)
-# tests/
+# Tests
+tests/
 
 # Data (mounted as volumes)
-data/cache/*
-data/backups/*
-data/duckdb/*.duckdb
-data/duckdb/temp/*
-data/duckdb/archives/*
-data/duckdb/snapshots/*
+data/**
 !data/.gitkeep
+!data/sample_*.csv
 
 # Logs
 logs/

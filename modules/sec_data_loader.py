@@ -12,7 +12,20 @@ import io
 import zipfile
 import requests
 import pandas as pd
-import streamlit as st
+try:
+    import streamlit as st
+except ImportError:
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+    class _StStub:
+        def warning(self, *a, **kw): _log.warning(*a)
+        def error(self, *a, **kw): _log.error(*a)
+        def info(self, *a, **kw): _log.info(*a)
+        @staticmethod
+        def cache_data(ttl=None):
+            def decorator(fn): return fn
+            return decorator
+    st = _StStub()
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from pathlib import Path

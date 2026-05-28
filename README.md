@@ -197,27 +197,19 @@ curl -X POST http://localhost:8000/v1/ingest/fred \
 Economic-Dashboard-API/
 ├── api/                    # FastAPI application
 │   ├── main.py            # Application entry point
-│   └── v1/routes/         # API endpoints
-│       ├── data.py        # Data retrieval
-│       ├── ingest.py      # Data ingestion
-│       ├── features.py    # Feature engineering
-│       └── predictions.py # ML predictions
-├── etl/                   # ETL pipeline
-│   ├── sources/           # Data source fetch modules
-│   ├── loaders/           # Data loading utilities
-│   └── jobs/              # Scheduled job definitions
+│   └── v1/                # Versioned API routes/dependencies/schemas
 ├── modules/               # Core business logic
 │   ├── database/          # Database abstraction layer
-│   │   ├── factory.py     # Multi-backend factory
-│   │   ├── queries.py     # Pre-built queries
-│   │   ├── schema.py      # DuckDB schema
-│   │   └── postgres_schema.py  # PostgreSQL schema
+│   │   ├── factory.py     # Multi-backend connection factory
+│   │   ├── queries.py     # Shared query functions
+│   │   └── schema_generator.py # Backend-aware schema creation
 │   ├── http_client.py     # HTTP client base class
 │   ├── validation.py      # Data validation schemas
 │   └── data_sources.py    # Data source registry
+├── services/              # Background orchestration/services
+│   ├── scheduler.py       # APScheduler job scheduler
+│   └── feature_store.py   # Pre-computed feature persistence
 ├── pages/                 # Streamlit dashboard pages
-├── services/              # Background services
-│   └── scheduler.py       # APScheduler job scheduler
 ├── docs/                  # Documentation
 │   ├── ADDING_DATA_SOURCES.md  # How to add new sources
 │   ├── REFACTOR_SUMMARY.md     # Architecture overview
@@ -233,7 +225,7 @@ Economic-Dashboard-API/
 It's now incredibly easy to add new data sources! Follow the 5-step checklist:
 
 1. **Define source config** in `modules/data_sources.py`
-2. **Create fetch module** in `etl/sources/{source_name}.py`
+2. **Create source module** in `modules/{source_name}_data.py`
 3. **Add database schema** (PostgreSQL or DuckDB)
 4. **Add validation schema** in `modules/validation.py`
 5. **Register scheduler** (GitHub Actions or APScheduler)

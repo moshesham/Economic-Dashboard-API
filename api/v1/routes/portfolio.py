@@ -73,13 +73,13 @@ async def optimize_portfolio(
         returns_data = {}
         
         for ticker in tickers:
-            result = db.query(f"""
+            result = db.query("""
                 SELECT date, close
-                FROM stock_prices
-                WHERE ticker = '{ticker}'
+                FROM yfinance_ohlcv
+                WHERE ticker = ?
                 ORDER BY date DESC
                 LIMIT 252
-            """)
+            """, (ticker,))
             if not result.empty:
                 returns_data[ticker] = result.set_index('date')['close'].pct_change().dropna()
         
@@ -206,13 +206,13 @@ async def get_efficient_frontier(
         returns_data = {}
         
         for ticker in tickers:
-            result = db.query(f"""
+            result = db.query("""
                 SELECT date, close
-                FROM stock_prices
-                WHERE ticker = '{ticker}'
+                FROM yfinance_ohlcv
+                WHERE ticker = ?
                 ORDER BY date DESC
                 LIMIT 252
-            """)
+            """, (ticker,))
             if not result.empty:
                 returns_data[ticker] = result.set_index('date')['close'].pct_change().dropna()
         
@@ -318,13 +318,13 @@ async def analyze_portfolio(
         returns_data = {}
         
         for ticker in tickers:
-            result = db.query(f"""
+            result = db.query("""
                 SELECT date, close
-                FROM stock_prices
-                WHERE ticker = '{ticker}'
+                FROM yfinance_ohlcv
+                WHERE ticker = ?
                 ORDER BY date DESC
                 LIMIT 252
-            """)
+            """, (ticker,))
             if not result.empty:
                 returns_data[ticker] = result.set_index('date')['close'].pct_change().dropna()
         
@@ -456,13 +456,13 @@ async def calculate_risk_parity(
         returns_data = {}
         
         for ticker in tickers:
-            result = db.query(f"""
+            result = db.query("""
                 SELECT date, close
-                FROM stock_prices
-                WHERE ticker = '{ticker}'
+                FROM yfinance_ohlcv
+                WHERE ticker = ?
                 ORDER BY date DESC
                 LIMIT 252
-            """)
+            """, (ticker,))
             if not result.empty:
                 returns_data[ticker] = result.set_index('date')['close'].pct_change().dropna()
         

@@ -240,10 +240,19 @@ class PostgreSQLBackend:
             create_all_tables()
         finally:
             clear_schema_db()
+
+    @staticmethod
+    def _normalize_placeholders(sql: str, params: Optional[tuple]) -> tuple[str, Optional[tuple]]:
+        """Translate qmark placeholders to psycopg2 format when needed."""
+        if not params or "?" not in sql:
+            return sql, params
+        return sql.replace("?", "%s"), params
     
     def query(self, sql: str, params: Optional[tuple] = None) -> pd.DataFrame:
         """Execute a SELECT query and return results as DataFrame."""
         import psycopg2.extras
+
+        sql, params = self._normalize_placeholders(sql, params)
         
         conn = self._get_connection()
         try:
@@ -261,6 +270,7 @@ class PostgreSQLBackend:
     
     def execute(self, sql: str, params: Optional[tuple] = None) -> None:
         """Execute a non-SELECT query."""
+        sql, params = self._normalize_placeholders(sql, params)
         conn = self._get_connection()
         try:
             with conn.cursor() as cursor:

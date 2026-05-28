@@ -1,0 +1,6 @@
+# Economic Dashboard UI requirements
+# Installed on top of requirements-api.txt for the dashboard image only.
+
+# Keep this list intentionally minimal for fast/small dashboard builds.
+# Core data/plotting deps (pandas, numpy, plotly) already come from requirements-api.txt.
+streamlit==1.10.0

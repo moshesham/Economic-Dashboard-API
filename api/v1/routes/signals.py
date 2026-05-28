@@ -83,16 +83,16 @@ async def get_all_margin_risk_signals(
         result = db.query(f"""
             SELECT 
                 ticker,
-                composite_score,
+                composite_risk_score,
                 risk_level,
                 leverage_score,
                 volatility_score,
                 options_score,
                 liquidity_score,
-                calculated_at
+                created_at
             FROM margin_call_risk
-            WHERE composite_score >= {min_risk}
-            ORDER BY composite_score DESC
+            WHERE composite_risk_score >= {min_risk}
+            ORDER BY composite_risk_score DESC
             LIMIT {limit}
         """)
         
@@ -135,9 +135,10 @@ async def get_insider_signal(
         from modules.features.insider_trading_tracker import InsiderTradingTracker
         
         tracker = InsiderTradingTracker()
-        sentiment = tracker.get_sentiment_analysis(ticker.upper(), days=days)
+        transactions_df = tracker.get_insider_transactions(ticker.upper())
+        sentiment = tracker.calculate_insider_sentiment(transactions_df, days=days)
         
-        if not sentiment:
+        if not sentiment or sentiment.get("signal", "Neutral") == "Neutral" and transactions_df.empty:
             raise HTTPException(
                 status_code=404,
                 detail=f"No insider data for ticker: {ticker}"
@@ -145,12 +146,14 @@ async def get_insider_signal(
         
         return {
             "ticker": ticker.upper(),
-            "sentiment_score": sentiment.get("score"),  # -1 to +1
-            "signal": sentiment.get("signal"),  # BEARISH, NEUTRAL, BULLISH
-            "net_shares": sentiment.get("net_shares"),
+            "sentiment_score": sentiment.get("sentiment_score"),
+            "signal": sentiment.get("signal"),
+            "buy_value": sentiment.get("buy_value"),
+            "sell_value": sentiment.get("sell_value"),
             "net_value": sentiment.get("net_value"),
-            "transaction_count": sentiment.get("count"),
-            "notable_transactions": sentiment.get("notable"),
+            "num_buyers": sentiment.get("num_buyers"),
+            "num_sellers": sentiment.get("num_sellers"),
+            "confidence": sentiment.get("confidence"),
             "period_days": days,
             "last_updated": datetime.utcnow().isoformat(),
         }
@@ -179,20 +182,47 @@ async def get_sector_rotation_signals():
         Sector rotation signals with rankings
     """
     try:
+        import json
         from modules.features.sector_rotation_detector import SectorRotationDetector
         
         detector = SectorRotationDetector()
-        rotation = detector.analyze_rotation()
+        rotation = detector.detect_rotation_pattern()
+        
+        if rotation.get("error"):
+            raise HTTPException(status_code=503, detail=rotation["error"])
+        
+        # Round-trip through JSON to coerce numpy types (int64, float64) to native Python
+        try:
+            import numpy as np
+            class _NpEncoder(json.JSONEncoder):
+                def default(self, obj):
+                    if isinstance(obj, np.integer):
+                        return int(obj)
+                    if isinstance(obj, np.floating):
+                        return float(obj)
+                    if isinstance(obj, np.ndarray):
+                        return obj.tolist()
+                    return super().default(obj)
+            rotation = json.loads(json.dumps(rotation, cls=_NpEncoder))
+        except Exception:
+            pass
         
         return {
-            "market_regime": rotation.get("regime"),  # Risk-On, Risk-Off
-            "sector_rankings": rotation.get("rankings"),
-            "leading_sectors": rotation.get("leading"),
-            "lagging_sectors": rotation.get("lagging"),
-            "rotation_signal": rotation.get("signal"),
+            "market_regime": rotation.get("pattern"),
+            "regime_description": rotation.get("description"),
+            "confidence": rotation.get("confidence"),
+            "sector_rankings": None,
+            "leading_sectors": rotation.get("leading_sectors"),
+            "lagging_sectors": rotation.get("lagging_sectors"),
+            "rotation_signal": rotation.get("pattern"),
+            "offensive_avg_rs": rotation.get("offensive_avg_rs"),
+            "defensive_avg_rs": rotation.get("defensive_avg_rs"),
+            "sector_breadth": rotation.get("sector_breadth"),
             "last_updated": datetime.utcnow().isoformat(),
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

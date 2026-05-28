@@ -41,6 +41,10 @@ class TechnicalIndicatorCalculator:
         
         if df.empty:
             raise ValueError(f"No OHLCV data found for {ticker}")
+
+        # Need at least 30 rows for meaningful technical indicators
+        if len(df) < 30:
+            raise ValueError(f"Insufficient data for {ticker}: {len(df)} rows (minimum 30 required)")
         
         # Ensure we have required columns
         required_cols = ['open', 'high', 'low', 'close', 'volume']

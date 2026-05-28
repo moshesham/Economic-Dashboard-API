@@ -1,8 +1,6 @@
 # Economic Dashboard API - Docker Compose Configuration
 # Multi-service architecture with API, Worker, Dashboard, and Redis
 
-version: '3.9'
-
 services:
   # ============================================================================
   # PostgreSQL Database - Primary data storage
@@ -21,12 +19,15 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./sql/init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dashboard_user} -d ${POSTGRES_DB:-economic_dashboard}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dashboard_user} -d ${POSTGRES_DB:-economic_dashboard}" ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
     restart: unless-stopped
+    cpus: 2.0
+    mem_limit: 2g
+    mem_reservation: 512m
     networks:
       - economic-network
     deploy:
@@ -45,14 +46,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: production
+      target: api
     container_name: economic-api
     command: >
-      python -m uvicorn api.main:app 
-      --host 0.0.0.0 
-      --port 8000 
-      --workers 4
-      --reload
+      python -m uvicorn api.main:app  --host 0.0.0.0  --port 8000  --workers 4
     ports:
       - "8000:8000"
     environment:
@@ -62,8 +59,9 @@ services:
       - DUCKDB_READ_ONLY=true
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=INFO
-      - API_KEY_ENABLED=true
+      - ENVIRONMENT=production
       - PYTHONPATH=/app
+      - API_KEY=${API_KEY:-}
     volumes:
       - duckdb_data:/app/data/duckdb:ro
       - cache_data:/app/data/cache:ro
@@ -73,9 +71,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      worker:
-        condition: service_started
     restart: unless-stopped
+    cpus: 2.0
+    mem_limit: 4g
+    mem_reservation: 2g
     networks:
       - economic-network
     deploy:
@@ -87,7 +86,7 @@ services:
           cpus: '1.0'
           memory: 2G
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -102,7 +101,7 @@ services:
       dockerfile: Dockerfile
       target: production
     container_name: economic-worker
-    command: python -m services.scheduler
+    command: python worker.py
     environment:
       - DATABASE_BACKEND=${DATABASE_BACKEND:-postgresql}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-dashboard_user}:${POSTGRES_PASSWORD:-dashboard_pass}@postgres:5432/${POSTGRES_DB:-economic_dashboard}
@@ -110,6 +109,7 @@ services:
       - DUCKDB_READ_ONLY=false
       - REDIS_URL=redis://redis:6379/0
       - LOG_LEVEL=INFO
+      - ENVIRONMENT=production
       - PYTHONPATH=/app
       # API Keys (load from .env)
       - FRED_API_KEY=${FRED_API_KEY:-}
@@ -126,6 +126,9 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    cpus: 4.0
+    mem_limit: 8g
+    mem_reservation: 4g
     networks:
       - economic-network
     deploy:
@@ -144,14 +147,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: production
+      target: dashboard
     container_name: economic-dashboard
     command: >
-      streamlit run app.py 
-      --server.port=8501 
-      --server.address=0.0.0.0
-      --server.headless=true
-      --browser.gatherUsageStats=false
+      streamlit run app.py  --server.port=8501  --server.address=0.0.0.0 --server.headless=true --browser.gatherUsageStats=false
     ports:
       - "8501:8501"
     environment:
@@ -163,11 +162,14 @@ services:
       - PYTHONPATH=/app
     volumes:
       - duckdb_data:/app/data/duckdb:ro
-      - cache_data:/app/data/cache:ro
+      - cache_data:/app/data/cache:rw
       - ./.streamlit:/app/.streamlit:ro
     depends_on:
       - api
     restart: unless-stopped
+    cpus: 1.0
+    mem_limit: 2g
+    mem_reservation: 1g
     networks:
       - economic-network
     deploy:
@@ -179,7 +181,7 @@ services:
           cpus: '0.5'
           memory: 1G
     profiles:
-      - with-dashboard  # Only starts with: docker-compose --profile with-dashboard up
+      - with-dashboard # Only starts with: docker-compose --profile with-dashboard up
 
   # ============================================================================
   # Redis Service - Caching and message queue
@@ -196,7 +198,7 @@ services:
     networks:
       - economic-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -1,0 +1,45 @@
+# Economic Dashboard API - Full worker requirements
+# Extends the slim API requirements with ML, sentiment, dashboard, and
+# data-validation packages needed only by the worker/training containers.
+#
+# Usage in Dockerfile:
+#   RUN pip install -r requirements-api.txt -r requirements-worker.txt
+
+# ============================================================================
+# Machine Learning
+# ============================================================================
+xgboost>=3.0.0
+lightgbm>=4.5.0
+scikit-learn>=1.5.0
+imbalanced-learn>=0.13.0
+
+# ============================================================================
+# Model Explainability
+# ============================================================================
+shap>=0.43.0
+
+# ============================================================================
+# Data Validation (ingestion pipelines)
+# ============================================================================
+pandera>=0.20.0
+
+# ============================================================================
+# Sentiment Analysis
+# ============================================================================
+textblob>=0.18.0
+
+# ============================================================================
+# Visualization (worker reports / Streamlit dashboard)
+# ============================================================================
+streamlit>=1.28.0
+matplotlib>=3.8.0
+seaborn>=0.13.0
+altair>=4.0.0
+
+# ============================================================================
+# Testing
+# ============================================================================
+pytest>=7.0.0
+pytest-cov>=4.1.0
+pytest-mock>=3.10.0
+pytest-asyncio>=0.23.0

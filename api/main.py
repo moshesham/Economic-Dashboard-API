@@ -5,12 +5,13 @@ FastAPI-based REST API for economic data, predictions, and analytics.
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 import logging
 import os
 
+from api.v1.dependencies.auth import verify_api_key
 from api.v1.routes import data, features, predictions, signals, portfolio, health, ingest
 from core.config import settings
 from core.logging import setup_logging
@@ -97,14 +98,15 @@ app.add_middleware(RequestLoggingMiddleware)
 # 4. Response caching (most inner - executes first)
 app.add_middleware(CacheMiddleware)
 
-# Include routers
+# Include routers — all /v1/* routes require API key authentication
+_auth = [Depends(verify_api_key)]
 app.include_router(health.router, tags=["Health"])
-app.include_router(data.router, prefix="/v1/data", tags=["Data"])
-app.include_router(features.router, prefix="/v1/features", tags=["Features"])
-app.include_router(predictions.router, prefix="/v1/predictions", tags=["Predictions"])
-app.include_router(signals.router, prefix="/v1/signals", tags=["Signals"])
-app.include_router(portfolio.router, prefix="/v1/portfolio", tags=["Portfolio"])
-app.include_router(ingest.router, prefix="/v1", tags=["Ingestion"])
+app.include_router(data.router, prefix="/v1/data", tags=["Data"], dependencies=_auth)
+app.include_router(features.router, prefix="/v1/features", tags=["Features"], dependencies=_auth)
+app.include_router(predictions.router, prefix="/v1/predictions", tags=["Predictions"], dependencies=_auth)
+app.include_router(signals.router, prefix="/v1/signals", tags=["Signals"], dependencies=_auth)
+app.include_router(portfolio.router, prefix="/v1/portfolio", tags=["Portfolio"], dependencies=_auth)
+app.include_router(ingest.router, prefix="/v1", tags=["Ingestion"], dependencies=_auth)
 
 
 @app.get("/")

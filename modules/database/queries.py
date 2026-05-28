@@ -29,17 +29,23 @@ def get_fred_series(series_ids: List[str], start_date: Optional[str] = None,
     """
     db = get_db_connection()
     
-    series_list = "','".join(series_ids)
-    query = f"SELECT * FROM fred_data WHERE series_id IN ('{series_list}')"
-    
+    if not series_ids:
+        return pd.DataFrame()
+
+    placeholders = ", ".join(["?" for _ in series_ids])
+    query = f"SELECT * FROM fred_data WHERE series_id IN ({placeholders})"
+    params: List[Any] = list(series_ids)
+
     if start_date:
-        query += f" AND date >= '{start_date}'"
+        query += " AND date >= ?"
+        params.append(start_date)
     if end_date:
-        query += f" AND date <= '{end_date}'"
-    
+        query += " AND date <= ?"
+        params.append(end_date)
+
     query += " ORDER BY series_id, date"
-    
-    return db.query(query)
+
+    return db.query(query, tuple(params))
 
 
 def get_stock_ohlcv(tickers: Optional[List[str]] = None, ticker: Optional[str] = None,
@@ -61,27 +67,32 @@ def get_stock_ohlcv(tickers: Optional[List[str]] = None, ticker: Optional[str] =
     """
     db = get_db_connection()
     
-    # Handle single ticker vs list
+    params: List[Any] = []
+
     if ticker:
-        ticker_list = ticker
-        query = f"SELECT * FROM yfinance_ohlcv WHERE ticker = '{ticker}'"
+        query = "SELECT * FROM yfinance_ohlcv WHERE ticker = ?"
+        params.append(ticker)
     elif tickers:
-        ticker_list = "','".join(tickers)
-        query = f"SELECT * FROM yfinance_ohlcv WHERE ticker IN ('{ticker_list}')"
+        placeholders = ", ".join(["?" for _ in tickers])
+        query = f"SELECT * FROM yfinance_ohlcv WHERE ticker IN ({placeholders})"
+        params.extend(tickers)
     else:
         raise ValueError("Either 'ticker' or 'tickers' must be provided")
-    
+
     if start_date:
-        query += f" AND date >= '{start_date}'"
+        query += " AND date >= ?"
+        params.append(start_date)
     if end_date:
-        query += f" AND date <= '{end_date}'"
-    
+        query += " AND date <= ?"
+        params.append(end_date)
+
     query += " ORDER BY ticker, date"
-    
+
     if limit:
-        query += f" LIMIT {limit}"
-    
-    df = db.query(query)
+        query += " LIMIT ?"
+        params.append(limit)
+
+    df = db.query(query, tuple(params))
     
     # If single ticker, set date as index
     if ticker and not df.empty:
@@ -105,16 +116,19 @@ def get_options_data(ticker: str, start_date: Optional[str] = None,
     """
     db = get_db_connection()
     
-    query = f"SELECT * FROM options_data WHERE ticker = '{ticker}'"
-    
+    query = "SELECT * FROM options_data WHERE ticker = ?"
+    params: List[Any] = [ticker]
+
     if start_date:
-        query += f" AND date >= '{start_date}'"
+        query += " AND date >= ?"
+        params.append(start_date)
     if end_date:
-        query += f" AND date <= '{end_date}'"
-    
+        query += " AND date <= ?"
+        params.append(end_date)
+
     query += " ORDER BY date, expiration_date"
-    
-    return db.query(query)
+
+    return db.query(query, tuple(params))
 
 
 def get_technical_features(ticker: str, start_date: Optional[str] = None,
@@ -132,16 +146,19 @@ def get_technical_features(ticker: str, start_date: Optional[str] = None,
     """
     db = get_db_connection()
     
-    query = f"SELECT * FROM technical_features WHERE ticker = '{ticker}'"
-    
+    query = "SELECT * FROM technical_features WHERE ticker = ?"
+    params: List[Any] = [ticker]
+
     if start_date:
-        query += f" AND date >= '{start_date}'"
+        query += " AND date >= ?"
+        params.append(start_date)
     if end_date:
-        query += f" AND date <= '{end_date}'"
-    
+        query += " AND date <= ?"
+        params.append(end_date)
+
     query += " ORDER BY date"
-    
-    return db.query(query)
+
+    return db.query(query, tuple(params))
 
 
 def get_latest_predictions(ticker: Optional[str] = None, 
@@ -161,15 +178,19 @@ def get_latest_predictions(ticker: Optional[str] = None,
     db = get_db_connection()
     
     query = "SELECT * FROM ml_predictions WHERE 1=1"
-    
+    params: List[Any] = []
+
     if ticker:
-        query += f" AND ticker = '{ticker}'"
+        query += " AND ticker = ?"
+        params.append(ticker)
     if model_version:
-        query += f" AND model_version = '{model_version}'"
-    
-    query += f" ORDER BY prediction_date DESC LIMIT {limit}"
-    
-    return db.query(query)
+        query += " AND model_version = ?"
+        params.append(model_version)
+
+    query += " ORDER BY prediction_date DESC LIMIT ?"
+    params.append(limit)
+
+    return db.query(query, tuple(params))
 
 
 def get_model_performance(model_version: Optional[str] = None,
@@ -187,15 +208,18 @@ def get_model_performance(model_version: Optional[str] = None,
     db = get_db_connection()
     
     query = "SELECT * FROM model_performance WHERE 1=1"
-    
+    params: List[Any] = []
+
     if model_version:
-        query += f" AND model_version = '{model_version}'"
+        query += " AND model_version = ?"
+        params.append(model_version)
     if start_date:
-        query += f" AND evaluation_date >= '{start_date}'"
-    
+        query += " AND evaluation_date >= ?"
+        params.append(start_date)
+
     query += " ORDER BY evaluation_date DESC"
-    
-    return db.query(query)
+
+    return db.query(query, tuple(params) if params else None)
 
 
 def get_feature_importance(ticker: str, prediction_date: str,
@@ -212,16 +236,16 @@ def get_feature_importance(ticker: str, prediction_date: str,
         Dictionary of feature names and importance scores
     """
     db = get_db_connection()
-    
-    query = f"""
-        SELECT top_features 
-        FROM ml_predictions 
-        WHERE ticker = '{ticker}' 
-          AND prediction_date = '{prediction_date}'
-          AND model_version = '{model_version}'
+
+    query = """
+        SELECT top_features
+        FROM ml_predictions
+        WHERE ticker = ?
+            AND prediction_date = ?
+            AND model_version = ?
     """
-    
-    result = db.query(query)
+
+    result = db.query(query, (ticker, prediction_date, model_version))
     
     if len(result) > 0 and result['top_features'].iloc[0]:
         import json
@@ -258,6 +282,24 @@ def get_data_freshness() -> pd.DataFrame:
     """
     
     return db.query(query)
+
+
+def get_monitored_tickers(limit: int = 200) -> List[str]:
+    """Return actively tracked tickers based on recent market data."""
+    db = get_db_connection()
+    result = db.query(
+        """
+        SELECT DISTINCT ticker
+        FROM yfinance_ohlcv
+        WHERE ticker IS NOT NULL
+        ORDER BY ticker
+        LIMIT ?
+        """,
+        (limit,),
+    )
+    if result.empty:
+        return []
+    return [str(t).upper() for t in result["ticker"].tolist()]
 
 
 # ============================================================================
@@ -417,7 +459,7 @@ def get_ml_features_for_date(ticker: str, as_of_date: str) -> pd.DataFrame:
     """
     db = get_db_connection()
     
-    query = f"""
+    query = """
         SELECT 
             o.*,
             t.*,
@@ -430,11 +472,11 @@ def get_ml_features_for_date(ticker: str, as_of_date: str) -> pd.DataFrame:
             ON o.ticker = d.ticker AND o.date = d.date
         LEFT JOIN market_indicators m
             ON o.date = m.date
-        WHERE o.ticker = '{ticker}'
-          AND o.date = '{as_of_date}'
+        WHERE o.ticker = ?
+          AND o.date = ?
     """
-    
-    return db.query(query)
+
+    return db.query(query, (ticker, as_of_date))
 
 
 def get_prediction_accuracy(model_version: str, days_back: int = 30) -> Dict[str, float]:
@@ -452,7 +494,7 @@ def get_prediction_accuracy(model_version: str, days_back: int = 30) -> Dict[str
     
     cutoff_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
     
-    query = f"""
+    query = """
         SELECT 
             COUNT(*) as total_predictions,
             SUM(CASE 
@@ -467,12 +509,12 @@ def get_prediction_accuracy(model_version: str, days_back: int = 30) -> Dict[str
         JOIN ml_training_data t
             ON p.ticker = t.ticker 
             AND p.target_date = t.target_date
-        WHERE p.model_version = '{model_version}'
-          AND p.prediction_date >= '{cutoff_date}'
+        WHERE p.model_version = ?
+          AND p.prediction_date >= ?
           AND t.target_direction IS NOT NULL
     """
-    
-    result = db.query(query)
+
+    result = db.query(query, (model_version, cutoff_date))
     
     if len(result) > 0:
         return {

@@ -21,7 +21,16 @@ Form 4 Transaction Codes:
 
 import pandas as pd
 import numpy as np
-import streamlit as st
+try:
+    import streamlit as st
+except ImportError:
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+    class _StStub:
+        def warning(self, *a, **kw): _log.warning(*a)
+        def error(self, *a, **kw): _log.error(*a)
+        def info(self, *a, **kw): _log.info(*a)
+    st = _StStub()
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Any
 import xml.etree.ElementTree as ET

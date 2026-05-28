@@ -309,7 +309,7 @@ class WorkerScheduler:
     def _compute_features(self):
         """Compute all features for monitored tickers."""
         from modules.database import get_monitored_tickers
-        from modules.features.feature_store import FeatureStore
+        from services.feature_store import FeatureStore
         
         start_time = datetime.utcnow()
         store = FeatureStore()

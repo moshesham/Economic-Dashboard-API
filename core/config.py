@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     WORKER_REFRESH_CRON: str = "0 6 * * *"
     WORKER_CLEANUP_CRON: str = "0 2 * * 0"
     WORKER_COMPACT_CRON: str = "0 3 * * 0"
+    WORKER_RUN_ON_STARTUP: bool = False
     
     # Feature Flags
     ENABLE_LLM_SENTIMENT: bool = False

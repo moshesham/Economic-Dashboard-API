@@ -276,6 +276,10 @@ class CacheMiddleware(BaseHTTPMiddleware):
         
         if not should_cache:
             return await call_next(request)
+
+        # Don't serve cached data when no API key is present — let auth run
+        if not request.headers.get("x-api-key"):
+            return await call_next(request)
         
         # Build cache key from path and query params
         query_params = dict(request.query_params)
