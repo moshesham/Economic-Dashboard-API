@@ -44,11 +44,17 @@ with st.sidebar:
                 
                 # Fetch leveraged ETF data
                 etf_tickers = list(leverage_calc.leveraged_etfs.keys())
-                etf_data = leverage_calc.fetch_leveraged_etf_data(etf_tickers)
-                if etf_data:
-                    for ticker, data in etf_data.items():
-                        leverage_calc.store_leveraged_etf_data(ticker, data)
-                    st.success(f"Updated {len(etf_data)} leveraged ETFs")
+                updated_count = 0
+                for ticker in etf_tickers:
+                    data = leverage_calc.fetch_leveraged_etf_data(ticker)
+                    if data is not None and not data.empty:
+                        leverage_calc.store_leveraged_etf_data(data)
+                        updated_count += 1
+
+                if updated_count > 0:
+                    st.success(f"Updated {updated_count} leveraged ETFs")
+                else:
+                    st.warning("No leveraged ETF data was updated")
                 
             except Exception as e:
                 st.error(f"Error refreshing data: {str(e)}")

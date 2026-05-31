@@ -111,6 +111,10 @@ with st.sidebar:
     
     refresh_data = st.button("🔄 Refresh Data", type="primary")
 
+if refresh_data:
+    st.cache_data.clear()
+    st.success("Cache cleared. Reloading insider data...")
+
 # Create tabs
 tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Transaction Feed",
@@ -129,6 +133,33 @@ tracker = InsiderTradingTracker()
 # Load data
 with st.spinner(f"Loading insider transactions for {ticker}..."):
     transactions_df = tracker.get_insider_transactions(ticker, days_back=lookback_days)
+
+analytics_required_columns = {
+    'transaction_date',
+    'transaction_code',
+    'transaction_value',
+    'insider_name',
+    'insider_title'
+}
+original_columns = set(transactions_df.columns)
+has_analytics_schema = analytics_required_columns.issubset(original_columns)
+missing_analytics_columns = sorted(list(analytics_required_columns - original_columns))
+
+# Normalize schema so downstream analytics can degrade gracefully instead of failing.
+if 'transaction_date' not in transactions_df.columns:
+    transactions_df['transaction_date'] = pd.Timestamp.utcnow()
+transactions_df['transaction_date'] = pd.to_datetime(
+    transactions_df['transaction_date'], errors='coerce'
+).fillna(pd.Timestamp.utcnow())
+
+if 'transaction_code' not in transactions_df.columns:
+    transactions_df['transaction_code'] = ''
+if 'transaction_value' not in transactions_df.columns:
+    transactions_df['transaction_value'] = 0.0
+if 'insider_name' not in transactions_df.columns:
+    transactions_df['insider_name'] = 'Unknown'
+if 'insider_title' not in transactions_df.columns:
+    transactions_df['insider_title'] = 'Unknown'
 
 if transactions_df.empty:
     st.warning(f"No insider transactions found for {ticker} in the last {lookback_days} days")
@@ -178,6 +209,13 @@ with tab1:
             st.metric("Latest Transaction", latest_date.strftime('%Y-%m-%d'))
         else:
             st.metric("Latest Transaction", "N/A")
+
+    if not has_analytics_schema:
+        st.info(
+            "Detailed Form 4 transaction parsing is incomplete for this dataset. "
+            "The feed tab is available, but Sentiment, Unusual Activity, and Backtest require "
+            f"additional fields: {', '.join(missing_analytics_columns)}."
+        )
     
     st.divider()
     
@@ -300,7 +338,13 @@ with tab1:
             st.plotly_chart(fig, use_container_width=True)
     
     # Top insiders
-    if 'insider_name' in filtered_df.columns and 'transaction_value' in filtered_df.columns:
+    if (
+        'insider_name' in filtered_df.columns and
+        'insider_title' in filtered_df.columns and
+        'transaction_value' in filtered_df.columns and
+        'transaction_code' in filtered_df.columns and
+        'shares' in filtered_df.columns
+    ):
         st.divider()
         st.subheader("👥 Top Insider Activity")
         
@@ -344,6 +388,12 @@ with tab1:
 # ============================================================================
 with tab2:
     st.subheader("💹 Insider Sentiment Score")
+
+    if not has_analytics_schema:
+        st.warning(
+            "Sentiment analysis requires fully parsed Form 4 transaction fields. "
+            "Try clicking Refresh Data, increasing lookback, or retrying later."
+        )
     
     with st.spinner("Calculating insider sentiment..."):
         sentiment = tracker.calculate_insider_sentiment(transactions_df, days=sentiment_period)
@@ -492,6 +542,12 @@ with tab2:
 # ============================================================================
 with tab3:
     st.subheader("⚠️ Unusual Insider Activity Detection")
+
+    if not has_analytics_schema:
+        st.warning(
+            "Unusual activity detection requires fully parsed transaction details "
+            "(code, value, insider metadata)."
+        )
     
     with st.spinner("Analyzing for unusual patterns..."):
         unusual = tracker.detect_unusual_activity(
@@ -606,184 +662,180 @@ with tab3:
 # ============================================================================
 with tab4:
     st.subheader("📈 Insider Signal Backtest")
-    
+
     st.markdown(f"""
     **Methodology:**
     - Signal Threshold: {signal_threshold} (sentiment score)
     - Holding Period: {holding_period} days
     - Data Period: Last {lookback_days} days
     """)
-    
-    with st.spinner(f"Backtesting insider signals for {ticker}..."):
-        backtest = tracker.backtest_insider_signals(
-            ticker,
-            transactions_df,
-            signal_threshold=signal_threshold,
-            holding_period_days=holding_period
+
+    if not has_analytics_schema:
+        st.warning(
+            "Backtesting requires detailed transaction fields and cannot run on filing-level fallback data."
         )
-    
-    if 'error' in backtest:
-        st.error(f"Backtest Error: {backtest['error']}")
-        st.stop()
-    
-    if backtest['total_signals'] == 0:
-        st.warning(f"No signals generated with threshold {signal_threshold}. Try lowering the threshold.")
-        st.stop()
-    
-    # Key metrics
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric(
-            "Total Signals",
-            backtest['total_signals'],
-            delta=f"{backtest['valid_trades']} valid trades"
-        )
-    
-    with col2:
-        win_rate = backtest['win_rate']
-        st.metric(
-            "Win Rate",
-            f"{win_rate:.1f}%",
-            delta="of trades profitable",
-            delta_color="normal" if win_rate > 50 else "inverse"
-        )
-    
-    with col3:
-        avg_return = backtest['avg_return']
-        st.metric(
-            "Avg Return",
-            f"{avg_return:+.2f}%",
-            delta=f"{holding_period}d holding",
-            delta_color="normal" if avg_return > 0 else "inverse"
-        )
-    
-    with col4:
-        alpha = backtest.get('alpha', 0)
-        st.metric(
-            "Alpha",
-            f"{alpha:+.2f}%",
-            delta="annualized vs benchmark",
-            delta_color="normal" if alpha > 0 else "inverse"
-        )
-    
-    st.divider()
-    
-    # Performance comparison
-    st.subheader("📊 Performance Comparison")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Returns comparison
-        returns_data = pd.DataFrame({
-            'Strategy': ['Insider Signals', 'Buy & Hold'],
-            'Annualized Return': [
-                backtest.get('annualized_signal_return', 0),
-                backtest.get('annualized_benchmark', 0)
-            ]
-        })
-        
-        fig = px.bar(
-            returns_data,
-            x='Strategy',
-            y='Annualized Return',
-            title="Annualized Returns: Insider Signals vs Buy & Hold",
-            color='Strategy',
-            text='Annualized Return',
-            color_discrete_sequence=['#2E86AB', '#A23B72']
-        )
-        fig.update_traces(texttemplate='%{text:+.2f}%', textposition='outside')
-        fig.update_layout(height=350, showlegend=False)
-        fig.add_hline(y=0, line_dash="dash", line_color="gray")
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        # Return distribution
-        return_stats = pd.DataFrame({
-            'Metric': ['Best', 'Median', 'Average', 'Worst'],
-            'Return': [
-                backtest.get('best_return', 0),
-                backtest.get('median_return', 0),
-                backtest.get('avg_return', 0),
-                backtest.get('worst_return', 0)
-            ]
-        })
-        
-        fig = px.bar(
-            return_stats,
-            x='Metric',
-            y='Return',
-            title=f"Return Distribution ({holding_period}-day holding)",
-            color='Return',
-            text='Return',
-            color_continuous_scale='RdYlGn',
-            color_continuous_midpoint=0
-        )
-        fig.update_traces(texttemplate='%{text:+.2f}%', textposition='outside')
-        fig.update_layout(height=350, showlegend=False, coloraxis_showscale=False)
-        fig.add_hline(y=0, line_dash="dash", line_color="gray")
-        st.plotly_chart(fig, use_container_width=True)
-    
-    # Detailed stats
-    st.divider()
-    st.subheader("📋 Detailed Statistics")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("### Signal Performance")
-        st.markdown(f"**Valid Trades:** {backtest['valid_trades']}")
-        st.markdown(f"**Win Rate:** {backtest['win_rate']:.2f}%")
-        st.markdown(f"**Average Return:** {backtest['avg_return']:+.2f}%")
-        st.markdown(f"**Median Return:** {backtest.get('median_return', 0):+.2f}%")
-        st.markdown(f"**Best Trade:** {backtest.get('best_return', 0):+.2f}%")
-        st.markdown(f"**Worst Trade:** {backtest.get('worst_return', 0):+.2f}%")
-    
-    with col2:
-        st.markdown("### Benchmark Comparison")
-        st.markdown(f"**Buy & Hold Return:** {backtest.get('benchmark_return', 0):+.2f}%")
-        st.markdown(f"**Signal Annualized:** {backtest.get('annualized_signal_return', 0):+.2f}%")
-        st.markdown(f"**Benchmark Annualized:** {backtest.get('annualized_benchmark', 0):+.2f}%")
-        st.markdown(f"**Alpha:** {backtest.get('alpha', 0):+.2f}%")
-        st.markdown(f"**Signal Threshold:** {backtest['signal_threshold']}")
-        st.markdown(f"**Holding Period:** {backtest['holding_period_days']} days")
-    
-    # Interpretation
-    st.divider()
-    st.subheader("💡 Interpretation")
-    
-    alpha = backtest.get('alpha', 0)
-    win_rate = backtest['win_rate']
-    
-    if alpha > 5 and win_rate > 60:
-        st.success("""
-        **🎯 Strong Performance!**
-        
-        The insider trading signal demonstrates significant alpha over buy-and-hold strategy 
-        with high win rate. Consider following insider activity for this ticker.
-        """)
-    elif alpha > 0 and win_rate > 50:
-        st.info("""
-        **📈 Positive Results**
-        
-        Insider signals show modest outperformance vs benchmark. Combining with other 
-        indicators may improve results.
-        """)
-    elif alpha > 0:
-        st.warning("""
-        **⚠️ Mixed Results**
-        
-        While generating positive alpha, the win rate suggests inconsistent performance. 
-        Use caution and consider additional confirmation.
-        """)
     else:
-        st.error("""
-        **❌ Underperformance**
-        
-        Insider signals underperformed buy-and-hold for this ticker and timeframe. 
-        Results may vary with different parameters or market conditions.
-        """)
+        with st.spinner(f"Backtesting insider signals for {ticker}..."):
+            backtest = tracker.backtest_insider_signals(
+                ticker,
+                transactions_df,
+                signal_threshold=signal_threshold,
+                holding_period_days=holding_period
+            )
+
+        if 'error' in backtest:
+            st.error(f"Backtest Error: {backtest['error']}")
+        elif backtest['total_signals'] == 0:
+            st.warning(f"No signals generated with threshold {signal_threshold}. Try lowering the threshold.")
+        else:
+            # Key metrics
+            col1, col2, col3, col4 = st.columns(4)
+
+            with col1:
+                st.metric(
+                    "Total Signals",
+                    backtest['total_signals'],
+                    delta=f"{backtest['valid_trades']} valid trades"
+                )
+
+            with col2:
+                win_rate = backtest['win_rate']
+                st.metric(
+                    "Win Rate",
+                    f"{win_rate:.1f}%",
+                    delta="of trades profitable",
+                    delta_color="normal" if win_rate > 50 else "inverse"
+                )
+
+            with col3:
+                avg_return = backtest['avg_return']
+                st.metric(
+                    "Avg Return",
+                    f"{avg_return:+.2f}%",
+                    delta=f"{holding_period}d holding",
+                    delta_color="normal" if avg_return > 0 else "inverse"
+                )
+
+            with col4:
+                alpha = backtest.get('alpha', 0)
+                st.metric(
+                    "Alpha",
+                    f"{alpha:+.2f}%",
+                    delta="annualized vs benchmark",
+                    delta_color="normal" if alpha > 0 else "inverse"
+                )
+
+            st.divider()
+            st.subheader("📊 Performance Comparison")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                returns_data = pd.DataFrame({
+                    'Strategy': ['Insider Signals', 'Buy & Hold'],
+                    'Annualized Return': [
+                        backtest.get('annualized_signal_return', 0),
+                        backtest.get('annualized_benchmark', 0)
+                    ]
+                })
+
+                fig = px.bar(
+                    returns_data,
+                    x='Strategy',
+                    y='Annualized Return',
+                    title="Annualized Returns: Insider Signals vs Buy & Hold",
+                    color='Strategy',
+                    text='Annualized Return',
+                    color_discrete_sequence=['#2E86AB', '#A23B72']
+                )
+                fig.update_traces(texttemplate='%{text:+.2f}%', textposition='outside')
+                fig.update_layout(height=350, showlegend=False)
+                fig.add_hline(y=0, line_dash="dash", line_color="gray")
+                st.plotly_chart(fig, use_container_width=True)
+
+            with col2:
+                return_stats = pd.DataFrame({
+                    'Metric': ['Best', 'Median', 'Average', 'Worst'],
+                    'Return': [
+                        backtest.get('best_return', 0),
+                        backtest.get('median_return', 0),
+                        backtest.get('avg_return', 0),
+                        backtest.get('worst_return', 0)
+                    ]
+                })
+
+                fig = px.bar(
+                    return_stats,
+                    x='Metric',
+                    y='Return',
+                    title=f"Return Distribution ({holding_period}-day holding)",
+                    color='Return',
+                    text='Return',
+                    color_continuous_scale='RdYlGn',
+                    color_continuous_midpoint=0
+                )
+                fig.update_traces(texttemplate='%{text:+.2f}%', textposition='outside')
+                fig.update_layout(height=350, showlegend=False, coloraxis_showscale=False)
+                fig.add_hline(y=0, line_dash="dash", line_color="gray")
+                st.plotly_chart(fig, use_container_width=True)
+
+            st.divider()
+            st.subheader("📋 Detailed Statistics")
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown("### Signal Performance")
+                st.markdown(f"**Valid Trades:** {backtest['valid_trades']}")
+                st.markdown(f"**Win Rate:** {backtest['win_rate']:.2f}%")
+                st.markdown(f"**Average Return:** {backtest['avg_return']:+.2f}%")
+                st.markdown(f"**Median Return:** {backtest.get('median_return', 0):+.2f}%")
+                st.markdown(f"**Best Trade:** {backtest.get('best_return', 0):+.2f}%")
+                st.markdown(f"**Worst Trade:** {backtest.get('worst_return', 0):+.2f}%")
+
+            with col2:
+                st.markdown("### Benchmark Comparison")
+                st.markdown(f"**Buy & Hold Return:** {backtest.get('benchmark_return', 0):+.2f}%")
+                st.markdown(f"**Signal Annualized:** {backtest.get('annualized_signal_return', 0):+.2f}%")
+                st.markdown(f"**Benchmark Annualized:** {backtest.get('annualized_benchmark', 0):+.2f}%")
+                st.markdown(f"**Alpha:** {backtest.get('alpha', 0):+.2f}%")
+                st.markdown(f"**Signal Threshold:** {backtest['signal_threshold']}")
+                st.markdown(f"**Holding Period:** {backtest['holding_period_days']} days")
+
+            st.divider()
+            st.subheader("💡 Interpretation")
+
+            alpha = backtest.get('alpha', 0)
+            win_rate = backtest['win_rate']
+
+            if alpha > 5 and win_rate > 60:
+                st.success("""
+                **🎯 Strong Performance!**
+
+                The insider trading signal demonstrates significant alpha over buy-and-hold strategy
+                with high win rate. Consider following insider activity for this ticker.
+                """)
+            elif alpha > 0 and win_rate > 50:
+                st.info("""
+                **📈 Positive Results**
+
+                Insider signals show modest outperformance vs benchmark. Combining with other
+                indicators may improve results.
+                """)
+            elif alpha > 0:
+                st.warning("""
+                **⚠️ Mixed Results**
+
+                While generating positive alpha, the win rate suggests inconsistent performance.
+                Use caution and consider additional confirmation.
+                """)
+            else:
+                st.error("""
+                **❌ Underperformance**
+
+                Insider signals underperformed buy-and-hold for this ticker and timeframe.
+                Results may vary with different parameters or market conditions.
+                """)
 
 # Footer
 st.divider()

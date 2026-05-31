@@ -71,6 +71,30 @@
 
 ## Quick Start
 
+### Option 0: Local Development (Virtual Environment, No Docker)
+```bash
+# Clone repository
+git clone https://github.com/moshesham/Economic-Dashboard-API.git
+cd Economic-Dashboard-API
+
+# Create and activate virtual environment
+py -3 -m venv .venv
+.venv\\Scripts\\activate
+
+# Install dependencies
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+
+# Create environment file
+copy .env.example .env
+
+# Run API
+python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+# In another terminal, run dashboard
+python -m streamlit run app.py --server.port=8501 --server.address=0.0.0.0
+```
+
 ### Option 1: Development (DuckDB - Local File Database)
 ```bash
 # Clone repository

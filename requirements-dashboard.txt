@@ -3,4 +3,4 @@
 
 # Keep this list intentionally minimal for fast/small dashboard builds.
 # Core data/plotting deps (pandas, numpy, plotly) already come from requirements-api.txt.
-streamlit==1.10.0
+streamlit==1.38.0

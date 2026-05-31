@@ -44,6 +44,12 @@ with st.sidebar:
         value="AAPL",
         help="Enter a stock ticker (e.g., AAPL, MSFT, GOOGL)"
     ).upper().strip()
+
+    manual_cik = st.text_input(
+        "Manual CIK Override (optional)",
+        value="",
+        help="Use when SEC ticker lookup is unavailable. Enter 10-digit CIK (or shorter; it will be zero-padded)."
+    ).strip()
     
     st.divider()
     
@@ -104,12 +110,17 @@ if ticker_input:
     # CIK lookup
     with st.spinner(f"Looking up {ticker_input}..."):
         cik = lookup_cik(ticker_input)
-        
-        if not cik:
-            st.error(f"❌ Could not find SEC CIK for ticker {ticker_input}. Please verify the ticker symbol.")
-            st.stop()
-        
-        st.success(f"✅ Found CIK: {cik}")
+
+    if not cik and manual_cik:
+        cik = manual_cik.zfill(10)
+        st.info(f"Using manual CIK override: {cik}")
+
+    if not cik:
+        st.error(f"❌ Could not find SEC CIK for ticker {ticker_input}.")
+        st.info("Provide a manual CIK override in the sidebar or verify the ticker symbol.")
+        st.stop()
+
+    st.success(f"✅ Using CIK: {cik}")
     
     # Create tabs for different analyses
     tab1, tab2, tab3 = st.tabs([
