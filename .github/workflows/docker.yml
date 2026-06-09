@@ -1,159 +1,96 @@
-# CI/CD Pipeline - Docker Build and Push
-name: CD - Docker Build & Push
+name: CD - Docker Build and Push
 
 on:
   push:
     branches: [main]
     tags:
       - 'v*'
+    paths:
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - 'requirements*.txt'
+      - 'api/**'
+      - 'modules/**'
+      - 'services/**'
+      - 'core/**'
+      - 'app.py'
+      - 'worker.py'
+      - '.github/workflows/docker.yml'
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Image tag'
-        required: false
-        default: 'latest'
 
 env:
   REGISTRY: ghcr.io
 
 jobs:
-  # ============================================================================
-  # Build and Push Docker Image
-  # ============================================================================
   build-and-push:
-    name: Build & Push Docker Image
+    name: Build and Push Images
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-    
+
     steps:
       - name: Checkout code (policy-compliant)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          rm -rf "$GITHUB_WORKSPACE"/*
-          git clone --depth 1 --branch "${GITHUB_REF_NAME}" "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_WORKSPACE"
-      
-      - name: Prepare image name (lowercase for Docker)
+          git init .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth 1 origin "${GITHUB_SHA}"
+          git checkout -qf FETCH_HEAD
+
+      - name: Prepare image names
         id: image
         run: |
           IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
-          echo "Image name: ${IMAGE_NAME}"
-      
-      - name: Set up Docker Buildx (policy-compliant)
+          SHORT_SHA="${GITHUB_SHA::7}"
+          echo "name=${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+          echo "sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
         run: |
           docker buildx create --name ci-builder --driver docker-container --use || docker buildx use ci-builder
           docker buildx inspect --bootstrap
-      
-      - name: Log in to Container Registry (policy-compliant)
+
+      - name: Log in to Container Registry
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login "${{ env.REGISTRY }}" -u "${{ github.actor }}" --password-stdin
-      
-      - name: Compute image tags (policy-compliant)
-        id: meta
+
+      - name: Build and push API image
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ steps.image.outputs.name }}"
-          SHORT_SHA="${GITHUB_SHA::7}"
-          TAGS="${IMAGE}:sha-${SHORT_SHA}"
-
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            TAG_NAME="${GITHUB_REF_NAME}"
-            SEMVER="${TAG_NAME#v}"
-            TAGS="${TAGS},${IMAGE}:${TAG_NAME},${IMAGE}:${SEMVER}"
-          fi
-
-          if [ "${GITHUB_REF_NAME}" = "main" ]; then
-            TAGS="${TAGS},${IMAGE}:latest"
-          else
-            SAFE_BRANCH="$(echo "${GITHUB_REF_NAME}" | tr '/' '-')"
-            TAGS="${TAGS},${IMAGE}:${SAFE_BRANCH}"
-          fi
-
-          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
-      
-      - name: Build and push Docker image (policy-compliant)
-        run: |
-          IFS=',' read -r -a TAG_ARRAY <<< "${{ steps.meta.outputs.tags }}"
-          TAG_ARGS=""
-          for tag in "${TAG_ARRAY[@]}"; do
-            TAG_ARGS="${TAG_ARGS} --tag ${tag}"
-          done
+          SHA_TAG="${IMAGE}:sha-${{ steps.image.outputs.sha }}"
+          LATEST_TAG="${IMAGE}:latest"
 
           docker buildx build \
             --platform linux/amd64 \
             --push \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
-            ${TAG_ARGS} \
+            --tag "${SHA_TAG}" \
+            --tag "${LATEST_TAG}" \
             .
 
-  # ============================================================================
-  # Build Worker Image
-  # ============================================================================
-  build-worker:
-    name: Build Worker Image
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    permissions:
-      contents: read
-      packages: write
-    
-    steps:
-      - name: Checkout code (policy-compliant)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push Worker image
         run: |
-          rm -rf "$GITHUB_WORKSPACE"/*
-          git clone --depth 1 --branch "${GITHUB_REF_NAME}" "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_WORKSPACE"
-      
-      - name: Prepare image name
-        id: image
-        run: |
-          IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
-      
-      - name: Set up Docker Buildx (policy-compliant)
-        run: |
-          docker buildx create --name ci-builder --driver docker-container --use || docker buildx use ci-builder
-          docker buildx inspect --bootstrap
-      
-      - name: Log in to Container Registry (policy-compliant)
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login "${{ env.REGISTRY }}" -u "${{ github.actor }}" --password-stdin
-      
-      - name: Build and push Worker image (policy-compliant)
-        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ steps.image.outputs.name }}-worker"
+          SHA_TAG="${IMAGE}:sha-${{ steps.image.outputs.sha }}"
+          LATEST_TAG="${IMAGE}:latest"
+
           docker buildx build \
             --platform linux/amd64 \
-            --push \
             --target production \
+            --push \
             --cache-from type=gha \
             --cache-to type=gha,mode=max \
-            --tag "${{ env.REGISTRY }}/${{ steps.image.outputs.name }}-worker:latest" \
+            --tag "${SHA_TAG}" \
+            --tag "${LATEST_TAG}" \
             .
 
-  # ============================================================================
-  # Notify on Success
-  # ============================================================================
-  notify:
-    name: Deployment Notification
-    runs-on: ubuntu-latest
-    needs: [build-and-push, build-worker]
-    if: success()
-    
-    steps:
-      - name: Create deployment summary
+      - name: Deployment summary
         run: |
-          IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Repository:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Registry:** ${{ env.REGISTRY }}/${IMAGE_NAME}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Images Built" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.REGISTRY }}/${IMAGE_NAME}:latest\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ env.REGISTRY }}/${IMAGE_NAME}-worker:latest\`" >> $GITHUB_STEP_SUMMARY
+          IMAGE_BASE="${{ env.REGISTRY }}/${{ steps.image.outputs.name }}"
+          echo "## Docker Publish Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "- API: ${IMAGE_BASE}:latest" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Worker: ${IMAGE_BASE}-worker:latest" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"

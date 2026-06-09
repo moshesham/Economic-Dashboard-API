@@ -1,5 +1,4 @@
-# CI/CD Pipeline - Test and Lint
-name: CI - Test & Lint
+name: CI - Validate
 
 on:
   push:
@@ -7,52 +6,11 @@ on:
   pull_request:
     branches: [main, develop]
 
-env:
-  PYTHON_VERSION: "3.11"
-
 jobs:
-  # ============================================================================
-  # Linting Job
-  # ============================================================================
-  lint:
-    name: Lint Code
+  validate:
+    name: Lint and Test
     runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code (policy-compliant)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git init .
-          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --depth 1 origin "${GITHUB_SHA}"
-          git checkout -qf FETCH_HEAD
 
-      - name: Prepare Python runtime (policy-compliant)
-        run: |
-          python3 --version
-          python3 -m pip install --upgrade pip
-      
-      - name: Install linting tools
-        run: |
-          pip install ruff mypy
-      
-      - name: Run Ruff linter
-        run: ruff check . --output-format=github
-        continue-on-error: true
-      
-      - name: Run Ruff formatter check
-        run: ruff format --check .
-        continue-on-error: true
-
-  # ============================================================================
-  # Unit Tests Job with Coverage
-  # ============================================================================
-  test:
-    name: Run Tests with Coverage
-    runs-on: ubuntu-latest
-    needs: lint
-    
     services:
       redis:
         image: redis:7-alpine
@@ -76,7 +34,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+
     steps:
       - name: Checkout code (policy-compliant)
         env:
@@ -87,123 +45,32 @@ jobs:
           git fetch --depth 1 origin "${GITHUB_SHA}"
           git checkout -qf FETCH_HEAD
 
-      - name: Prepare Python runtime (policy-compliant)
+      - name: Prepare Python runtime
         run: |
           python3 --version
           python3 -m pip install --upgrade pip
-      
+
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-      
-      - name: Create necessary directories
-        run: |
-          mkdir -p data/cache data/duckdb
-      
-      - name: Run tests with coverage
-        run: |
-          pytest tests/ -v --tb=short \
-            --cov=api --cov=modules --cov=services --cov=core \
-            --cov-report=xml --cov-report=html --cov-report=term \
-            --junitxml=test-results.xml
+          pip install ruff
+
+      - name: Run lint
+        run: ruff check .
+
+      - name: Run tests
         env:
           REDIS_URL: redis://localhost:6379/0
           DATABASE_BACKEND: duckdb
           DUCKDB_PATH: ./data/duckdb/test.duckdb
           ENVIRONMENT: test
-      
-      - name: Generate coverage summary
+        run: |
+          mkdir -p data/cache data/duckdb
+          pytest tests/ -v --tb=short --maxfail=1
+
+      - name: Write summary
         if: always()
         run: |
-          if [ -f coverage.xml ]; then
-            echo "## Test Coverage Summary" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            python - <<'PY' >> "$GITHUB_STEP_SUMMARY" || echo "Coverage report generation failed"
-            import xml.etree.ElementTree as ET
-
-            try:
-                tree = ET.parse("coverage.xml")
-                root = tree.getroot()
-                line_rate = float(root.attrib.get("line-rate", 0.0)) * 100
-                print(f"**Overall Coverage:** {line_rate:.2f}%")
-            except Exception as exc:
-                print(f"Could not parse coverage: {exc}")
-            PY
-          fi
-      
-      - name: Report generated test artifacts
-        if: always()
-        run: |
-          echo "### Local CI Artifacts" >> $GITHUB_STEP_SUMMARY
-          echo "- test-results.xml" >> $GITHUB_STEP_SUMMARY
-          echo "- coverage.xml" >> $GITHUB_STEP_SUMMARY
-          echo "- htmlcov/" >> $GITHUB_STEP_SUMMARY
-
-  # ============================================================================
-  # Type Checking Job
-  # ============================================================================
-  type-check:
-    name: Type Check
-    runs-on: ubuntu-latest
-    needs: lint
-    
-    steps:
-      - name: Checkout code (policy-compliant)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git init .
-          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --depth 1 origin "${GITHUB_SHA}"
-          git checkout -qf FETCH_HEAD
-
-      - name: Prepare Python runtime (policy-compliant)
-        run: |
-          python3 --version
-          python3 -m pip install --upgrade pip
-      
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install mypy types-requests
-      
-      - name: Run mypy
-        run: mypy api/ --ignore-missing-imports --no-error-summary || true
-
-  # ============================================================================
-  # Security Scan Job
-  # ============================================================================
-  security:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code (policy-compliant)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git init .
-          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          git fetch --depth 1 origin "${GITHUB_SHA}"
-          git checkout -qf FETCH_HEAD
-
-      - name: Prepare Python runtime (policy-compliant)
-        run: |
-          python3 --version
-          python3 -m pip install --upgrade pip
-      
-      - name: Install Bandit
-        run: pip install bandit[toml]
-      
-      - name: Run Bandit security scan
-        run: bandit -r api/ modules/ services/ -f json -o bandit-report.json || true
-      
-      - name: Security scan summary
-        if: always()
-        run: |
-          echo "### Security Report" >> $GITHUB_STEP_SUMMARY
-          if [ -f bandit-report.json ]; then
-            echo "bandit-report.json generated" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "bandit-report.json missing" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "## CI Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Workflow: CI - Validate" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
