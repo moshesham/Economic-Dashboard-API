@@ -10,7 +10,6 @@ import logging
 import signal
 import sys
 import time
-from typing import Optional
 
 # Configure logging first
 from core.logging import setup_logging
