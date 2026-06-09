@@ -28,8 +28,12 @@ jobs:
       packages: write
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout code (policy-compliant)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rm -rf "$GITHUB_WORKSPACE"/*
+          git clone --depth 1 --branch "${GITHUB_REF_NAME}" "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_WORKSPACE"
       
       - name: Prepare image name (lowercase for Docker)
         id: image
@@ -38,39 +42,52 @@ jobs:
           echo "name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
           echo "Image name: ${IMAGE_NAME}"
       
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx (policy-compliant)
+        run: |
+          docker buildx create --name ci-builder --driver docker-container --use || docker buildx use ci-builder
+          docker buildx inspect --bootstrap
       
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to Container Registry (policy-compliant)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login "${{ env.REGISTRY }}" -u "${{ github.actor }}" --password-stdin
       
-      - name: Extract metadata for Docker
+      - name: Compute image tags (policy-compliant)
         id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix=
-            type=raw,value=latest,enable={{is_default_branch}}
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ steps.image.outputs.name }}"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          TAGS="${IMAGE}:sha-${SHORT_SHA}"
+
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG_NAME="${GITHUB_REF_NAME}"
+            SEMVER="${TAG_NAME#v}"
+            TAGS="${TAGS},${IMAGE}:${TAG_NAME},${IMAGE}:${SEMVER}"
+          fi
+
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            TAGS="${TAGS},${IMAGE}:latest"
+          else
+            SAFE_BRANCH="$(echo "${GITHUB_REF_NAME}" | tr '/' '-')"
+            TAGS="${TAGS},${IMAGE}:${SAFE_BRANCH}"
+          fi
+
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
       
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64
+      - name: Build and push Docker image (policy-compliant)
+        run: |
+          IFS=',' read -r -a TAG_ARRAY <<< "${{ steps.meta.outputs.tags }}"
+          TAG_ARGS=""
+          for tag in "${TAG_ARRAY[@]}"; do
+            TAG_ARGS="${TAG_ARGS} --tag ${tag}"
+          done
+
+          docker buildx build \
+            --platform linux/amd64 \
+            --push \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            ${TAG_ARGS} \
+            .
 
   # ============================================================================
   # Build Worker Image
@@ -84,8 +101,12 @@ jobs:
       packages: write
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout code (policy-compliant)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rm -rf "$GITHUB_WORKSPACE"/*
+          git clone --depth 1 --branch "${GITHUB_REF_NAME}" "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$GITHUB_WORKSPACE"
       
       - name: Prepare image name
         id: image
@@ -93,26 +114,25 @@ jobs:
           IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
       
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx (policy-compliant)
+        run: |
+          docker buildx create --name ci-builder --driver docker-container --use || docker buildx use ci-builder
+          docker buildx inspect --bootstrap
       
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to Container Registry (policy-compliant)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login "${{ env.REGISTRY }}" -u "${{ github.actor }}" --password-stdin
       
-      - name: Build and push Worker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}-worker:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            TARGET=worker
+      - name: Build and push Worker image (policy-compliant)
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --push \
+            --target production \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            --tag "${{ env.REGISTRY }}/${{ steps.image.outputs.name }}-worker:latest" \
+            .
 
   # ============================================================================
   # Notify on Success

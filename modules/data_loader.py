@@ -31,6 +31,8 @@ except (ImportError, TypeError):
     pdr = None
     _PDR_AVAILABLE = False
 from datetime import datetime, timedelta
+from urllib.parse import urlencode
+from io import StringIO
 import os
 import pickle
 import time
@@ -172,6 +174,59 @@ def _load_offline_yfinance_data(tickers: dict, period: str = "5y") -> dict:
         return {}
 
 
+def _get_fred_api_key() -> str | None:
+    """Resolve FRED API key from secure store first, then environment/.env."""
+    try:
+        creds_manager = get_credentials_manager()
+        key = creds_manager.get_api_key('fred')
+        if key:
+            return key
+    except Exception:
+        pass
+    return os.getenv('FRED_API_KEY')
+
+
+def _fetch_fred_series(series_id: str, start) -> pd.DataFrame:
+    """Fetch a single FRED series with pandas-datareader or direct CSV fallback."""
+    fred_api_key = _get_fred_api_key()
+    pdr_error = None
+
+    if _PDR_AVAILABLE and pdr is not None:
+        try:
+            if fred_api_key:
+                return pdr.DataReader(series_id, 'fred', start=start, api_key=fred_api_key)
+            return pdr.DataReader(series_id, 'fred', start=start)
+        except Exception as exc:
+            pdr_error = exc
+
+    try:
+        start_str = pd.to_datetime(start).date().isoformat()
+        params = {'id': series_id, 'cosd': start_str}
+        if fred_api_key:
+            params['api_key'] = fred_api_key
+
+        csv_url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?{urlencode(params)}"
+        import requests
+        response = requests.get(csv_url, timeout=20)
+        response.raise_for_status()
+        df = pd.read_csv(StringIO(response.text))
+        df.columns = [str(c).lstrip('\ufeff').strip() for c in df.columns]
+
+        date_col = 'DATE' if 'DATE' in df.columns else 'observation_date'
+        if date_col not in df.columns or series_id not in df.columns:
+            raise ValueError(f"Unexpected FRED response columns: {list(df.columns)}")
+
+        df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
+        df[series_id] = pd.to_numeric(df[series_id], errors='coerce')
+        df = df.dropna(subset=[date_col, series_id]).set_index(date_col).sort_index()
+        df.index.name = 'DATE'
+        return df
+    except Exception as csv_error:
+        if pdr_error is not None:
+            raise RuntimeError(f"pandas-datareader failed: {pdr_error}; CSV fallback failed: {csv_error}")
+        raise
+
+
 @st.cache_data(ttl=3600)
 def load_fred_data(series_ids: dict) -> pd.DataFrame:
     """
@@ -205,7 +260,12 @@ def load_fred_data(series_ids: dict) -> pd.DataFrame:
                 
                 return result
         except Exception as e:
-            st.warning(f"Could not load from DuckDB: {e}. Falling back to API.")
+            err = str(e)
+            if "fred_data" in err and "does not exist" in err:
+                # Fresh local environments may not have DB tables yet; API fallback is expected.
+                pass
+            else:
+                st.warning(f"Could not load from DuckDB: {e}. Falling back to API.")
 
     # First, try to load from the centralized cache (updated daily by automation)
     centralized_cache = f"{get_cache_dir()}/fred_all_series.pkl"
@@ -229,19 +289,10 @@ def load_fred_data(series_ids: dict) -> pd.DataFrame:
 
     # Load from API
     try:
-        # Get FRED API key from credentials manager
-        creds_manager = get_credentials_manager()
-        fred_api_key = creds_manager.get_api_key('fred')
-        
         data_frames = {}
         for name, series_id in series_ids.items():
             try:
-                # Use API key if available
-                if fred_api_key:
-                    df = pdr.DataReader(series_id, 'fred', start='2000-01-01', api_key=fred_api_key)
-                else:
-                    # Fallback to unauthenticated access
-                    df = pdr.DataReader(series_id, 'fred', start='2000-01-01')
+                df = _fetch_fred_series(series_id, start='2000-01-01')
                 
                 if not df.empty:
                     data_frames[name] = df.iloc[:, 0]
@@ -560,15 +611,7 @@ def get_latest_value(series_id: str) -> float | None:
 
     # Load from API
     try:
-        # Get FRED API key from credentials manager
-        creds_manager = get_credentials_manager()
-        fred_api_key = creds_manager.get_api_key('fred')
-        
-        # Use API key if available
-        if fred_api_key:
-            df = pdr.DataReader(series_id, 'fred', start=(datetime.now() - timedelta(days=365)), api_key=fred_api_key)
-        else:
-            df = pdr.DataReader(series_id, 'fred', start=(datetime.now() - timedelta(days=365)))
+        df = _fetch_fred_series(series_id, start=(datetime.now() - timedelta(days=365)))
         
         if not df.empty:
             latest_value = float(df.iloc[-1, 0])
@@ -641,15 +684,7 @@ def calculate_percentage_change(series_id: str, periods: int = 4) -> float | Non
 
     # Load from API
     try:
-        # Get FRED API key from credentials manager
-        creds_manager = get_credentials_manager()
-        fred_api_key = creds_manager.get_api_key('fred')
-        
-        # Use API key if available
-        if fred_api_key:
-            df = pdr.DataReader(series_id, 'fred', start=(datetime.now() - timedelta(days=730)), api_key=fred_api_key)
-        else:
-            df = pdr.DataReader(series_id, 'fred', start=(datetime.now() - timedelta(days=730)))
+        df = _fetch_fred_series(series_id, start=(datetime.now() - timedelta(days=730)))
         
         if not df.empty and len(df) >= periods + 1:
             latest = df.iloc[-1, 0]

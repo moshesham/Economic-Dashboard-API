@@ -51,6 +51,15 @@ Thumbs.db
 *.log
 logs/
 
+# Runtime data artifacts (generated locally or by containers)
+data/cache/
+data/backups/
+data/duckdb/*.duckdb
+data/duckdb/*.duckdb.wal
+data/duckdb/*.db
+data/duckdb/*.tmp
+data/duckdb/*.corrupt-*.duckdb
+
 # Streamlit
 .streamlit/secrets.toml
 var/
