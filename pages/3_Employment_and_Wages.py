@@ -13,6 +13,12 @@ try:
 except Exception:
     BLS_DB_AVAILABLE = False
 
+try:
+    from modules.bls_data import refresh_bls_data
+    BLS_REFRESH_AVAILABLE = True
+except Exception:
+    BLS_REFRESH_AVAILABLE = False
+
 st.set_page_config(page_title="Employment & Wages", page_icon="💼", layout="wide")
 
 st.title("💼 Employment & Wages Analysis")
@@ -94,6 +100,23 @@ def _latest_and_yoy(series_df: pd.DataFrame, series_id: str) -> tuple[float | No
 
 
 bls_data = load_bls_batch(BLS_SERIES_IDS)
+
+# Sidebar utility: trigger local BLS ingestion refresh and rerender page.
+with st.sidebar:
+    st.divider()
+    st.subheader("BLS Data Utility")
+    if st.button("Refresh BLS Data Now", type="secondary", disabled=not BLS_REFRESH_AVAILABLE):
+        if not BLS_REFRESH_AVAILABLE:
+            st.warning("BLS refresh module is not available in this runtime.")
+        else:
+            with st.spinner("Refreshing BLS data..."):
+                try:
+                    records = refresh_bls_data(series_ids=BLS_SERIES_IDS)
+                    load_bls_batch.clear()
+                    st.success(f"BLS refresh completed: {records} records inserted.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"BLS refresh failed: {exc}")
 
 # === HEADLINE METRICS ===
 st.header("📊 Key Employment Metrics")
