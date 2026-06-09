@@ -58,6 +58,7 @@ This document summarizes the major refactoring work completed to modernize the E
    - `DATABASE_BACKEND` configuration
    - PostgreSQL connection parameters
    - DuckDB fallback configuration
+   - Optional source keys for BLS, Census, and EIA
 
 5. **`requirements.txt`** - UPDATED
    - Added `psycopg2-binary>=2.9.9`

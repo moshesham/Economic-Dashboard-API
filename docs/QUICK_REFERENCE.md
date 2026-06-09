@@ -125,6 +125,11 @@ enabled = list_sources(enabled=True)
 ```env
 DATABASE_BACKEND=postgresql  # or 'duckdb'
 DATABASE_URL=postgresql://user:pass@host:5432/db
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=economic_dashboard
+POSTGRES_USER=dashboard_user
+POSTGRES_PASSWORD=dashboard_pass
 ```
 
 ### API Keys
@@ -132,6 +137,9 @@ DATABASE_URL=postgresql://user:pass@host:5432/db
 FRED_API_KEY=your_key
 NEWS_API_KEY=your_key
 ALPHA_VANTAGE_API_KEY=your_key
+BLS_API_KEY=your_key
+CENSUS_API_KEY=your_key
+EIA_API_KEY=your_key
 ```
 
 ### API Settings

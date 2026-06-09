@@ -162,6 +162,8 @@ curl http://localhost:8000/health
 - **Census Bureau** - Retail sales, housing starts, international trade statistics
 - **EIA** - Energy Information Administration (oil, gas, electricity prices and inventories)
 
+The application settings model accepts the corresponding `BLS_API_KEY`, `CENSUS_API_KEY`, `EIA_API_KEY`, `DATABASE_BACKEND`, and `POSTGRES_*` environment variables used by the app and Docker deployment.
+
 ### 📈 Analytics & Features
 - **Technical Indicators** - RSI, MACD, Bollinger Bands, ADX, ATR, Stochastic, MFI
 - **ML Predictions** - Multi-horizon stock predictions using XGBoost and LightGBM

@@ -39,6 +39,18 @@ class Settings(BaseSettings):
     ALPHA_VANTAGE_API_KEY: Optional[str] = None
     NEWS_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
+    BLS_API_KEY: Optional[str] = None
+    CENSUS_API_KEY: Optional[str] = None
+    EIA_API_KEY: Optional[str] = None
+
+    # Database backend selection
+    DATABASE_BACKEND: str = "duckdb"
+    DATABASE_URL: Optional[str] = None
+    POSTGRES_HOST: str = "localhost"
+    POSTGRES_PORT: int = 5432
+    POSTGRES_DB: str = "economic_dashboard"
+    POSTGRES_USER: str = "dashboard_user"
+    POSTGRES_PASSWORD: str = "dashboard_pass"
     
     # Logging
     LOG_LEVEL: str = "INFO"
@@ -68,7 +80,8 @@ class Settings(BaseSettings):
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
-        "case_sensitive": True
+        "case_sensitive": True,
+        "extra": "ignore",
     }
     
     def model_post_init(self, __context) -> None:

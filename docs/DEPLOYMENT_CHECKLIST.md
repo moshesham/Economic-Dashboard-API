@@ -1,6 +1,6 @@
 # Production Deployment Checklist
 
-This checklist guides you through deploying the refactored Economic Dashboard API to production with PostgreSQL.
+This checklist guides you through deploying the Economic Dashboard API to production with either DuckDB or PostgreSQL.
 
 ## Pre-Deployment
 
@@ -21,6 +21,13 @@ This checklist guides you through deploying the refactored Economic Dashboard AP
   POSTGRES_DB=economic_dashboard
   POSTGRES_USER=dashboard_user
   POSTGRES_PASSWORD=<strong-password>
+  ```
+
+- [ ] Add optional source keys used by the app:
+  ```env
+  BLS_API_KEY=your_bls_key_here
+  CENSUS_API_KEY=your_census_key_here
+  EIA_API_KEY=your_eia_key_here
   ```
 
 - [ ] Add API keys:
@@ -75,6 +82,9 @@ This checklist guides you through deploying the refactored Economic Dashboard AP
   - `FRED_API_KEY`
   - `NEWS_API_KEY`
   - `ALPHA_VANTAGE_API_KEY`
+  - `BLS_API_KEY` (optional)
+  - `CENSUS_API_KEY` (optional)
+  - `EIA_API_KEY` (optional)
 
 - [ ] Update workflow files to use PostgreSQL:
   ```yaml
