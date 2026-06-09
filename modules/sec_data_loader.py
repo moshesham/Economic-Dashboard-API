@@ -9,6 +9,7 @@ Handles downloading and processing SEC EDGAR data including:
 
 import os
 import io
+import json
 import zipfile
 import requests
 import pandas as pd
@@ -27,7 +28,7 @@ except ImportError:
             return decorator
     st = _StStub()
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Iterable
 from pathlib import Path
 
 # Import DuckDB database functions
@@ -42,6 +43,10 @@ SEC_BASE_URL = "https://www.sec.gov"
 SEC_DATA_URL = "https://data.sec.gov"
 SEC_FSDS_URL = f"{SEC_BASE_URL}/files/dera/data/financial-statement-data-sets"
 SEC_FTD_URL = f"{SEC_BASE_URL}/data/foiadocsfailsdocs"
+SEC_BULK_COMPANYFACTS_URL = f"{SEC_BASE_URL}/Archives/edgar/daily-index/xbrl/companyfacts.zip"
+SEC_BULK_SUBMISSIONS_URL = f"{SEC_BASE_URL}/Archives/edgar/daily-index/bulkdata/submissions.zip"
+SEC_COMPANY_TICKERS_URL = f"{SEC_DATA_URL}/company_tickers.json"
+SEC_BULK_REFRESH_DAYS = 7
 
 # Required User-Agent for SEC API requests (per SEC guidelines)
 SEC_USER_AGENT = "Economic-Dashboard/1.0 (contact@example.com)"
@@ -60,12 +65,308 @@ SEC_DATA_HEADERS = {
 # Rate limiting (SEC allows ~10 requests/second)
 SEC_REQUEST_DELAY = 0.1  # 100ms between requests
 
+SEC_BULK_DATASETS = {
+    'companyfacts': {
+        'url': SEC_BULK_COMPANYFACTS_URL,
+        'archive_name': 'companyfacts.zip',
+        'member_names': lambda cik: [f"companyfacts/CIK{cik}.json", f"CIK{cik}.json"],
+    },
+    'submissions': {
+        'url': SEC_BULK_SUBMISSIONS_URL,
+        'archive_name': 'submissions.zip',
+        'member_names': lambda cik: [f"submissions/CIK{cik}.json", f"CIK{cik}.json"],
+    },
+}
+
 
 def _get_cache_dir() -> Path:
     """Get the cache directory for SEC data."""
     cache_dir = Path(__file__).parent.parent / 'data' / 'cache' / 'sec'
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
+
+
+def _is_stale(path: Path, max_age_days: int) -> bool:
+    """Return True when cache file is older than the freshness window."""
+    if not path.exists():
+        return True
+    age = datetime.now() - datetime.fromtimestamp(path.stat().st_mtime)
+    return age >= timedelta(days=max_age_days)
+
+
+def _write_response_to_cache(url: str, headers: dict, destination: Path) -> Optional[Path]:
+    """Download a SEC endpoint response into a local cache file."""
+    response = _download_with_retry(url, headers)
+    if response is None:
+        return None
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with open(destination, 'wb') as handle:
+        handle.write(response.content)
+    return destination
+
+
+def _ensure_cached_reference_file(
+    cache_name: str,
+    url: str,
+    headers: dict,
+    max_age_days: int = SEC_BULK_REFRESH_DAYS,
+    force: bool = False,
+) -> Optional[Path]:
+    """Ensure a weekly-refreshed SEC reference file exists in cache."""
+    cache_path = _get_cache_dir() / cache_name
+    if force or _is_stale(cache_path, max_age_days):
+        return _write_response_to_cache(url, headers, cache_path)
+    return cache_path
+
+
+def _load_json_file(path: Path) -> Dict[str, Any]:
+    """Load JSON content from disk safely."""
+    try:
+        return json.loads(path.read_text(encoding='utf-8'))
+    except FileNotFoundError:
+        return {}
+    except Exception as exc:
+        st.warning(f"Could not read cached SEC file {path.name}: {exc}")
+        return {}
+
+
+def _ensure_bulk_archive(dataset: str, force: bool = False) -> Optional[Path]:
+    """Ensure the requested SEC bulk ZIP file is cached locally."""
+    config = SEC_BULK_DATASETS[dataset]
+    return _ensure_cached_reference_file(
+        cache_name=config['archive_name'],
+        url=config['url'],
+        headers=SEC_HEADERS,
+        force=force,
+    )
+
+
+def _extract_bulk_company_json(dataset: str, cik: str, force: bool = False) -> Optional[Path]:
+    """Extract company-specific JSON from a cached SEC bulk archive."""
+    cik_padded = str(cik).zfill(10)
+    archive_path = _ensure_bulk_archive(dataset, force=force)
+    if archive_path is None:
+        return None
+
+    extracted_dir = _get_cache_dir() / dataset
+    extracted_dir.mkdir(parents=True, exist_ok=True)
+    extracted_path = extracted_dir / f"CIK{cik_padded}.json"
+
+    if extracted_path.exists() and extracted_path.stat().st_mtime >= archive_path.stat().st_mtime:
+        return extracted_path
+
+    member_names: Iterable[str] = SEC_BULK_DATASETS[dataset]['member_names'](cik_padded)
+
+    try:
+        with zipfile.ZipFile(archive_path, 'r') as archive:
+            payload = None
+            for member_name in member_names:
+                try:
+                    payload = archive.read(member_name)
+                    break
+                except KeyError:
+                    continue
+
+            if payload is None:
+                return None
+
+            extracted_path.write_bytes(payload)
+            return extracted_path
+    except Exception as exc:
+        st.warning(f"Could not extract {dataset} data for CIK {cik_padded}: {exc}")
+        return None
+
+
+def _load_bulk_company_json(dataset: str, cik: str, force: bool = False) -> Dict[str, Any]:
+    """Load company JSON payload from weekly SEC bulk datasets."""
+    extracted_path = _extract_bulk_company_json(dataset, cik, force=force)
+    if extracted_path is None:
+        return {}
+    return _load_json_file(extracted_path)
+
+
+def _load_company_tickers_df(force: bool = False) -> pd.DataFrame:
+    """Load SEC company tickers reference from local cache."""
+    cache_path = _ensure_cached_reference_file(
+        cache_name='company_tickers.json',
+        url=SEC_COMPANY_TICKERS_URL,
+        headers=SEC_DATA_HEADERS,
+        force=force,
+    )
+    if cache_path is None:
+        return pd.DataFrame()
+
+    data = _load_json_file(cache_path)
+    if not data:
+        return pd.DataFrame()
+
+    try:
+        df = pd.DataFrame(data.values())
+        if df.empty:
+            return df
+
+        df = df.rename(columns={'cik_str': 'cik'})
+        for col in ['cik', 'ticker', 'title']:
+            if col not in df.columns:
+                df[col] = None
+        df = df[['cik', 'ticker', 'title']]
+        df['cik'] = df['cik'].astype(str).str.zfill(10)
+        df['ticker'] = df['ticker'].astype(str).str.upper()
+        return df
+    except Exception as exc:
+        st.warning(f"Could not parse cached SEC tickers: {exc}")
+        return pd.DataFrame()
+
+
+def refresh_sec_reference_data(force: bool = False) -> Dict[str, Optional[str]]:
+    """Refresh weekly SEC bulk archives and ticker reference files."""
+    refreshed: Dict[str, Optional[str]] = {}
+    for dataset_name in SEC_BULK_DATASETS:
+        archive_path = _ensure_bulk_archive(dataset_name, force=force)
+        refreshed[dataset_name] = str(archive_path) if archive_path else None
+
+    tickers_path = _ensure_cached_reference_file(
+        cache_name='company_tickers.json',
+        url=SEC_COMPANY_TICKERS_URL,
+        headers=SEC_DATA_HEADERS,
+        force=force,
+    )
+    refreshed['company_tickers'] = str(tickers_path) if tickers_path else None
+    return refreshed
+
+
+def company_facts_to_dataframe(
+    company_facts: Dict[str, Any],
+    concepts: Optional[Iterable[str]] = None,
+) -> pd.DataFrame:
+    """Flatten company facts JSON into sec_company_facts row shape."""
+    concepts_filter = set(concepts) if concepts else None
+    facts = company_facts.get('facts', {})
+    cik = str(company_facts.get('cik', '')).zfill(10)
+
+    rows: List[Dict[str, Any]] = []
+    for taxonomy_facts in facts.values():
+        for concept, concept_data in taxonomy_facts.items():
+            if concepts_filter and concept not in concepts_filter:
+                continue
+
+            for unit, values in concept_data.get('units', {}).items():
+                for value in values:
+                    end_date = pd.to_datetime(value.get('end'), errors='coerce')
+                    if pd.isna(end_date):
+                        continue
+
+                    rows.append({
+                        'cik': cik,
+                        'concept': concept,
+                        'unit': unit,
+                        'value': value.get('val'),
+                        'start_date': pd.to_datetime(value.get('start'), errors='coerce'),
+                        'end_date': end_date,
+                        'fy': value.get('fy'),
+                        'fp': value.get('fp'),
+                        'form': value.get('form'),
+                        'filed': pd.to_datetime(value.get('filed'), errors='coerce'),
+                        'accn': value.get('accn'),
+                    })
+
+    return pd.DataFrame(rows)
+
+
+def _recent_submissions_to_dataframe(submissions: Dict[str, Any], cik: str) -> pd.DataFrame:
+    """Convert SEC submissions JSON into a recent filings dataframe."""
+    recent = submissions.get('filings', {}).get('recent', {})
+    if not recent:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(recent)
+    if df.empty:
+        return df
+
+    if 'filingDate' in df.columns:
+        df['filingDate'] = pd.to_datetime(df['filingDate'], errors='coerce')
+    if 'reportDate' in df.columns:
+        df['reportDate'] = pd.to_datetime(df['reportDate'], errors='coerce')
+
+    df['cik'] = str(cik).zfill(10)
+    df['company_name'] = submissions.get('name', '')
+    df['tickers'] = str(submissions.get('tickers', []))
+
+    if 'accessionNumber' in df.columns and 'accession_number' not in df.columns:
+        df['accession_number'] = df['accessionNumber']
+    if 'filingDate' in df.columns and 'filing_date' not in df.columns:
+        df['filing_date'] = df['filingDate']
+    if 'reportDate' in df.columns and 'report_date' not in df.columns:
+        df['report_date'] = df['reportDate']
+
+    return df
+
+
+def save_recent_filings_to_db(cik: str, submissions: Dict[str, Any]) -> int:
+    """Persist recent filing metadata from submissions bulk payload."""
+    if not DUCKDB_AVAILABLE:
+        return 0
+
+    filings_df = _recent_submissions_to_dataframe(submissions, cik)
+    if filings_df.empty:
+        return 0
+
+    try:
+        from modules.database import insert_sec_filings
+        return insert_sec_filings(filings_df)
+    except Exception as exc:
+        st.warning(f"Could not save recent SEC filings for CIK {cik}: {exc}")
+        return 0
+
+
+def refresh_sec_bulk_data(tickers: Optional[List[str]] = None, force: bool = False) -> Dict[str, Any]:
+    """Refresh weekly SEC archives and optionally hydrate DB rows for selected tickers."""
+    refresh_status = refresh_sec_reference_data(force=force)
+    hydrated_facts = 0
+    hydrated_filings = 0
+    processed_tickers = 0
+
+    tickers = [ticker.upper() for ticker in (tickers or []) if ticker]
+    if not tickers:
+        return {
+            'refreshed': refresh_status,
+            'processed_tickers': processed_tickers,
+            'company_facts_rows': hydrated_facts,
+            'filings_rows': hydrated_filings,
+        }
+
+    tickers_df = _load_company_tickers_df(force=False)
+    if tickers_df.empty:
+        return {
+            'refreshed': refresh_status,
+            'processed_tickers': processed_tickers,
+            'company_facts_rows': hydrated_facts,
+            'filings_rows': hydrated_filings,
+        }
+
+    cik_by_ticker = tickers_df.set_index('ticker')['cik'].to_dict()
+
+    for ticker in tickers:
+        cik = cik_by_ticker.get(ticker)
+        if not cik:
+            continue
+
+        processed_tickers += 1
+        submissions = get_company_submissions(cik)
+        if submissions:
+            hydrated_filings += save_recent_filings_to_db(cik, submissions)
+
+        company_facts = get_company_facts(cik)
+        if company_facts:
+            hydrated_facts += save_company_facts_to_db(cik, company_facts)
+
+    return {
+        'refreshed': refresh_status,
+        'processed_tickers': processed_tickers,
+        'company_facts_rows': hydrated_facts,
+        'filings_rows': hydrated_filings,
+    }
 
 
 def _download_with_retry(url: str, headers: dict, max_retries: int = 3) -> Optional[requests.Response]:
@@ -234,22 +535,13 @@ def get_company_facts(cik: str) -> Dict[str, Any]:
     Returns:
         Dictionary containing all company facts organized by taxonomy
     """
-    # Zero-pad CIK to 10 digits
     cik_padded = str(cik).zfill(10)
-    url = f"{SEC_DATA_URL}/api/xbrl/companyfacts/CIK{cik_padded}.json"
-    
-    try:
-        response = _download_with_retry(url, SEC_DATA_HEADERS)
-        
-        if response is None:
-            st.warning(f"Company facts not available for CIK {cik}")
-            return {}
-        
-        return response.json()
-        
-    except Exception as e:
-        st.error(f"Error fetching company facts: {e}")
-        return {}
+    company_facts = _load_bulk_company_json('companyfacts', cik_padded)
+    if company_facts:
+        return company_facts
+
+    st.warning(f"Company facts not available in weekly SEC bulk data for CIK {cik_padded}")
+    return {}
 
 
 def extract_financial_metric(company_facts: Dict, 
@@ -371,20 +663,12 @@ def get_company_submissions(cik: str) -> Dict[str, Any]:
         Dictionary containing company info and filing history
     """
     cik_padded = str(cik).zfill(10)
-    url = f"{SEC_DATA_URL}/submissions/CIK{cik_padded}.json"
-    
-    try:
-        response = _download_with_retry(url, SEC_DATA_HEADERS)
-        
-        if response is None:
-            st.warning(f"Submissions not available for CIK {cik}")
-            return {}
-        
-        return response.json()
-        
-    except Exception as e:
-        st.error(f"Error fetching company submissions: {e}")
-        return {}
+    submissions = _load_bulk_company_json('submissions', cik_padded)
+    if submissions:
+        return submissions
+
+    st.warning(f"Submissions not available in weekly SEC bulk data for CIK {cik_padded}")
+    return {}
 
 
 def get_recent_filings(cik: str, form_types: Optional[List[str]] = None) -> pd.DataFrame:
@@ -399,36 +683,18 @@ def get_recent_filings(cik: str, form_types: Optional[List[str]] = None) -> pd.D
         DataFrame with recent filings
     """
     submissions = get_company_submissions(cik)
-    
+
     if not submissions:
         return pd.DataFrame()
-    
+
     try:
-        # Extract recent filings
-        recent = submissions.get('filings', {}).get('recent', {})
-        
-        if not recent:
-            return pd.DataFrame()
-        
-        df = pd.DataFrame(recent)
-        
-        # Filter by form type if specified
-        if form_types:
+        df = _recent_submissions_to_dataframe(submissions, cik)
+
+        if form_types and not df.empty:
             df = df[df['form'].isin(form_types)]
-        
-        # Convert dates
-        if 'filingDate' in df.columns:
-            df['filingDate'] = pd.to_datetime(df['filingDate'])
-        if 'reportDate' in df.columns:
-            df['reportDate'] = pd.to_datetime(df['reportDate'])
-        
-        # Add company info
-        df['cik'] = cik
-        df['company_name'] = submissions.get('name', '')
-        df['tickers'] = str(submissions.get('tickers', []))
-        
+
         return df
-        
+
     except Exception as e:
         st.warning(f"Could not parse filings: {e}")
         return pd.DataFrame()
@@ -552,32 +818,19 @@ def lookup_cik(ticker: str) -> Optional[str]:
     Returns:
         CIK number as string, or None if not found
     """
-    url = f"{SEC_DATA_URL}/submissions/CIK{ticker.upper()}.json"
-    
-    # First try direct lookup (some tickers work directly)
     try:
-        response = _download_with_retry(url, SEC_DATA_HEADERS)
-        if response:
-            data = response.json()
-            return str(data.get('cik', '')).zfill(10)
-    except Exception:
-        pass
-    
-    # Try the company tickers JSON file
-    try:
-        tickers_url = f"{SEC_DATA_URL}/company_tickers.json"
-        response = _download_with_retry(tickers_url, SEC_DATA_HEADERS)
-        
-        if response:
-            tickers_data = response.json()
-            
-            for entry in tickers_data.values():
-                if entry.get('ticker', '').upper() == ticker.upper():
-                    return str(entry.get('cik_str', '')).zfill(10)
+        tickers_df = _load_company_tickers_df(force=False)
+        if tickers_df.empty:
+            return None
+
+        subset = tickers_df[tickers_df['ticker'] == ticker.upper()]
+        if subset.empty:
+            return None
+
+        return str(subset.iloc[0]['cik']).zfill(10)
     except Exception as e:
         st.warning(f"CIK lookup failed: {e}")
-    
-    return None
+        return None
 
 
 @st.cache_data(ttl=86400)
@@ -588,21 +841,7 @@ def get_company_tickers() -> pd.DataFrame:
     Returns:
         DataFrame with columns: cik, ticker, title
     """
-    url = f"{SEC_DATA_URL}/company_tickers.json"
-    
-    try:
-        response = _download_with_retry(url, SEC_DATA_HEADERS)
-        
-        if response:
-            data = response.json()
-            df = pd.DataFrame(data.values())
-            df.columns = ['cik', 'ticker', 'title']
-            df['cik'] = df['cik'].astype(str).str.zfill(10)
-            return df
-    except Exception as e:
-        st.error(f"Error fetching company tickers: {e}")
-    
-    return pd.DataFrame()
+    return _load_company_tickers_df(force=False)
 
 
 # =============================================================================
@@ -674,19 +913,34 @@ def save_company_facts_to_db(cik: str, company_facts: Dict) -> int:
         st.warning("DuckDB not available for saving SEC data")
         return 0
     
-    # Extract and save key metrics
-    key_financials = get_key_financials(cik)
-    
-    if key_financials.empty:
+    company_facts_df = company_facts_to_dataframe(company_facts)
+
+    if company_facts_df.empty:
         return 0
-    
+
     db = get_db_connection()
-    key_financials['cik'] = cik
-    
+
     try:
-        db.insert_df(key_financials, 'sec_company_facts', if_exists='append',
-                     conflict_columns=['cik', 'concept', 'end_date'] if {'cik', 'concept', 'end_date'}.issubset(key_financials.columns) else None)
-        return len(key_financials)
+        db.insert_df(company_facts_df, 'sec_company_facts', if_exists='append',
+                     conflict_columns=['cik', 'concept', 'end_date', 'unit'] if {'cik', 'concept', 'end_date', 'unit'}.issubset(company_facts_df.columns) else None)
+        return len(company_facts_df)
     except Exception as e:
         st.warning(f"Could not save company facts: {e}")
         return 0
+
+
+def get_sec_filings(ticker: str, form_type: Optional[str] = None, limit: int = 10) -> List[Dict[str, Any]]:
+    """Return recent filings for API usage backed by weekly SEC bulk datasets."""
+    cik = lookup_cik(ticker)
+    if not cik:
+        return []
+
+    form_types = [form_type] if form_type else None
+    filings_df = get_recent_filings(cik, form_types=form_types)
+    if filings_df.empty:
+        return []
+
+    if 'filingDate' in filings_df.columns:
+        filings_df = filings_df.sort_values('filingDate', ascending=False)
+
+    return filings_df.head(limit).to_dict(orient='records')

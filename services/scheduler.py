@@ -168,6 +168,22 @@ class WorkerScheduler:
             replace_existing=True,
         )
         logger.info(f"Scheduled crypto refresh at {hour:02d}:{minute:02d}")
+
+    def add_sec_bulk_refresh_job(self, day_of_week: str = 'sun', hour: int = 5, minute: int = 0):
+        """Schedule weekly SEC bulk datasets refresh."""
+        self.scheduler.add_job(
+            self._refresh_sec_bulk_data,
+            CronTrigger(day_of_week=day_of_week, hour=hour, minute=minute),
+            id='sec_bulk_refresh',
+            name='SEC Bulk Datasets Refresh',
+            replace_existing=True,
+        )
+        logger.info(
+            "Scheduled SEC bulk refresh on %s at %02d:%02d",
+            day_of_week,
+            hour,
+            minute,
+        )
     
     # =========================================================================
     # Feature Computation Jobs
@@ -392,6 +408,25 @@ class WorkerScheduler:
         duration = (datetime.utcnow() - start_time).total_seconds()
         logger.info(f"SEC refresh completed in {duration:.2f}s")
         return duration
+
+    def _refresh_sec_bulk_data(self):
+        """Refresh weekly SEC bulk archives and hydrate tracked tickers."""
+        from modules.database import get_monitored_tickers
+        from modules.sec_data_loader import refresh_sec_bulk_data
+
+        start_time = datetime.utcnow()
+        tickers = get_monitored_tickers() or []
+        result = refresh_sec_bulk_data(tickers=tickers)
+
+        duration = (datetime.utcnow() - start_time).total_seconds()
+        logger.info(
+            "SEC bulk refresh completed in %.2fs (tickers=%s, facts_rows=%s, filings_rows=%s)",
+            duration,
+            result.get('processed_tickers', 0),
+            result.get('company_facts_rows', 0),
+            result.get('filings_rows', 0),
+        )
+        return duration
     
     def _compute_features(self):
         """Compute all features for monitored tickers."""
@@ -530,6 +565,7 @@ def setup_all_jobs(scheduler: Optional[WorkerScheduler] = None):
     scheduler.add_stock_refresh_job(interval_minutes=5)
     scheduler.add_options_refresh_job(interval_minutes=15)
     scheduler.add_sec_refresh_job(hour=6, minute=0)
+    scheduler.add_sec_bulk_refresh_job(day_of_week='sun', hour=5, minute=0)
     scheduler.add_crypto_refresh_job(hour=1, minute=30)
     
     # Feature computation
