@@ -2,13 +2,12 @@
 
 Use this index to navigate the project documentation.
 
-## Strategic Planning & Roadmap
+## Planning
 
-- **`STRATEGIC_PLANNING_GUIDE.md`**: 🚀 **START HERE** - Quick navigation guide for all strategic documents
-- **`EXECUTIVE_SUMMARY.md`**: 📊 High-level project review, improvement priorities, and action plan
-- **`PROJECT_IMPROVEMENT_PLAN.md`**: 🔧 Detailed technical improvements across testing, monitoring, security, and performance
-- **`DATA_PRODUCTS_STRATEGY.md`**: 💰 Data product catalog, monetization, and exposure strategies
-- **`IMPLEMENTATION_CHECKLIST.md`**: ✅ Actionable checklist for tracking progress across all phases
+- **`EXECUTIVE_SUMMARY.md`**: High-level project review, priorities, and action plan
+- **`PROJECT_IMPROVEMENT_PLAN.md`**: Detailed roadmap for engineering improvements
+- **`DATA_PRODUCTS_STRATEGY.md`**: Data product catalog and monetization strategy
+- **`IMPLEMENTATION_CHECKLIST.md`**: Actionable checklist for phased execution
 
 ## Getting Started
 
@@ -41,4 +40,3 @@ Use this index to navigate the project documentation.
 ## Development
 
 - **`AIRFLOW_GITHUB_INTEGRATION.md`**: Airflow and GitHub Actions integration
-- Root **`CLEANUP_SUMMARY.md`**: Code cleanup history and technical debt

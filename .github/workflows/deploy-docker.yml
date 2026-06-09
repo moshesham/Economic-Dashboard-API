@@ -99,7 +99,7 @@ jobs:
           ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
           
           # Create deployment script
-          cat > deploy.sh << 'EOF'
+          cat > deploy.sh << EOF
           #!/bin/bash
           set -e
           

@@ -125,4 +125,4 @@ jobs:
         echo "**Triggered at:** $(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
         echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "View details in Airflow UI: ${AIRFLOW_URL}" >> $GITHUB_STEP_SUMMARY
+        echo "View details in Airflow UI: ${{ secrets.AIRFLOW_URL || 'Not configured' }}" >> $GITHUB_STEP_SUMMARY

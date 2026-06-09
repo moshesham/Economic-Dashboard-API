@@ -97,8 +97,7 @@ jobs:
           pytest tests/ -v --tb=short \
             --cov=api --cov=modules --cov=services --cov=core \
             --cov-report=xml --cov-report=html --cov-report=term \
-            --junitxml=test-results.xml \
-            || true
+            --junitxml=test-results.xml
         env:
           REDIS_URL: redis://localhost:6379/0
           DATABASE_BACKEND: duckdb
@@ -111,16 +110,17 @@ jobs:
           if [ -f coverage.xml ]; then
             echo "## Test Coverage Summary" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            python -c "
-          import xml.etree.ElementTree as ET
-          try:
-              tree = ET.parse('coverage.xml')
-              root = tree.getroot()
-              coverage = root.attrib
-              print(f\"**Overall Coverage:** {float(coverage.get('line-rate', 0)) * 100:.2f}%\")
-          except Exception as e:
-              print(f\"Could not parse coverage: {e}\")
-          " >> $GITHUB_STEP_SUMMARY || echo "Coverage report generation failed"
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY" || echo "Coverage report generation failed"
+            import xml.etree.ElementTree as ET
+
+            try:
+                tree = ET.parse("coverage.xml")
+                root = tree.getroot()
+                line_rate = float(root.attrib.get("line-rate", 0.0)) * 100
+                print(f"**Overall Coverage:** {line_rate:.2f}%")
+            except Exception as exc:
+                print(f"Could not parse coverage: {exc}")
+            PY
           fi
       
       - name: Upload coverage to Codecov
