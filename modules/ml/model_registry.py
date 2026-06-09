@@ -156,7 +156,7 @@ class ModelRegistry:
             
             # Upsert using raw SQL for PostgreSQL
             import os
-            if os.getenv('DATABASE_BACKEND', 'duckdb').lower() == 'postgresql':
+            if os.getenv('DATABASE_BACKEND', 'postgresql').lower() == 'postgresql':
                 for _, r in row.iterrows():
                     db.execute("""
                         INSERT INTO model_registry (model_id, model_name, model_version, model_type, ticker, artifact_path, feature_names, hyperparameters, training_metrics, validation_metrics, status, trained_at, promoted_at)

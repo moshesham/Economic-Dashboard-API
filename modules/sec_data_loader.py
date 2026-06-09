@@ -31,12 +31,12 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Iterable
 from pathlib import Path
 
-# Import DuckDB database functions
+# Import database functions (backend selected by modules.database.factory)
 try:
     from modules.database import get_db_connection
-    DUCKDB_AVAILABLE = True
+    DB_BACKEND_AVAILABLE = True
 except ImportError:
-    DUCKDB_AVAILABLE = False
+    DB_BACKEND_AVAILABLE = False
 
 # SEC API Configuration
 SEC_BASE_URL = "https://www.sec.gov"
@@ -305,7 +305,7 @@ def _recent_submissions_to_dataframe(submissions: Dict[str, Any], cik: str) -> p
 
 def save_recent_filings_to_db(cik: str, submissions: Dict[str, Any]) -> int:
     """Persist recent filing metadata from submissions bulk payload."""
-    if not DUCKDB_AVAILABLE:
+    if not DB_BACKEND_AVAILABLE:
         return 0
 
     filings_df = _recent_submissions_to_dataframe(submissions, cik)
@@ -852,7 +852,7 @@ def save_financial_statements_to_db(fsds_data: Dict[str, pd.DataFrame],
                                     year: int, 
                                     quarter: int) -> int:
     """
-    Save Financial Statement Data Sets to DuckDB.
+    Save Financial Statement Data Sets to the configured database backend.
     
     Args:
         fsds_data: Dictionary from download_financial_statement_data()
@@ -862,8 +862,8 @@ def save_financial_statements_to_db(fsds_data: Dict[str, pd.DataFrame],
     Returns:
         Number of records saved
     """
-    if not DUCKDB_AVAILABLE:
-        st.warning("DuckDB not available for saving SEC data")
+    if not DB_BACKEND_AVAILABLE:
+        st.warning("Database backend not available for saving SEC data")
         return 0
     
     db = get_db_connection()
@@ -900,7 +900,7 @@ def save_financial_statements_to_db(fsds_data: Dict[str, pd.DataFrame],
 
 def save_company_facts_to_db(cik: str, company_facts: Dict) -> int:
     """
-    Save company facts to DuckDB.
+    Save company facts to the configured database backend.
     
     Args:
         cik: Company CIK number
@@ -909,8 +909,8 @@ def save_company_facts_to_db(cik: str, company_facts: Dict) -> int:
     Returns:
         Number of records saved
     """
-    if not DUCKDB_AVAILABLE:
-        st.warning("DuckDB not available for saving SEC data")
+    if not DB_BACKEND_AVAILABLE:
+        st.warning("Database backend not available for saving SEC data")
         return 0
     
     company_facts_df = company_facts_to_dataframe(company_facts)

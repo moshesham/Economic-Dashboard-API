@@ -92,10 +92,7 @@ COPY --from=builder-api ${VENV_PATH} ${VENV_PATH}
 
 COPY --chown=appuser:appgroup . .
 
-RUN mkdir -p /app/data/duckdb/temp \
-    /app/data/duckdb/snapshots \
-    /app/data/duckdb/archives \
-    /app/data/cache \
+RUN mkdir -p /app/data/cache \
     /app/data/backups \
     /app/logs \
     && chown -R appuser:appgroup /app/data /app/logs
@@ -138,10 +135,7 @@ COPY --from=builder ${VENV_PATH} ${VENV_PATH}
 COPY --chown=appuser:appgroup . .
 
 # Create data directories
-RUN mkdir -p /app/data/duckdb/temp \
-    /app/data/duckdb/snapshots \
-    /app/data/duckdb/archives \
-    /app/data/cache \
+RUN mkdir -p /app/data/cache \
     /app/data/backups \
     /app/logs \
     && chown -R appuser:appgroup /app/data /app/logs
@@ -183,10 +177,7 @@ WORKDIR /app
 COPY --from=builder-dashboard ${VENV_PATH} ${VENV_PATH}
 COPY --chown=appuser:appgroup . .
 
-RUN mkdir -p /app/data/duckdb/temp \
-    /app/data/duckdb/snapshots \
-    /app/data/duckdb/archives \
-    /app/data/cache \
+RUN mkdir -p /app/data/cache \
     /app/data/backups \
     /app/logs \
     && chown -R appuser:appgroup /app/data /app/logs

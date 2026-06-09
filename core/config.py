@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     API_RATE_LIMIT: int = 100  # requests per minute
     CORS_ORIGINS: List[str] = ["*"]
     
-    # Database
+    # Legacy DuckDB knobs (kept temporarily for backward compatibility)
     DUCKDB_PATH: str = str(Path(__file__).parent.parent / "data" / "duckdb" / "economic_dashboard.duckdb")
     DUCKDB_READ_ONLY: bool = False
     DUCKDB_MEMORY_LIMIT: str = "4GB"
@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     EIA_API_KEY: Optional[str] = None
 
     # Database backend selection
-    DATABASE_BACKEND: str = "duckdb"
+    DATABASE_BACKEND: str = "postgresql"
     DATABASE_URL: Optional[str] = None
     POSTGRES_HOST: str = "localhost"
     POSTGRES_PORT: int = 5432

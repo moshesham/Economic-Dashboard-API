@@ -370,7 +370,7 @@ class DatabaseConnection:
     
     def _initialize_backend(self) -> None:
         """Initialize the appropriate database backend based on configuration."""
-        backend_type = os.getenv('DATABASE_BACKEND', 'duckdb').lower()
+        backend_type = os.getenv('DATABASE_BACKEND', 'postgresql').lower()
         
         if backend_type == 'postgresql':
             logger.info("Initializing PostgreSQL backend")

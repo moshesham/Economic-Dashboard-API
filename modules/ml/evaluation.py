@@ -42,16 +42,16 @@ class ModelEvaluator:
     - Prediction quality over time
     """
     
-    def __init__(self, db_path: str = "data/duckdb/economic_dashboard.duckdb"):
+    def __init__(self, db_path: str = ""):
         """
         Initialize the model evaluator.
         
         Args:
-            db_path: Path to DuckDB database
+            db_path: Legacy optional DB path (ignored for PostgreSQL-first runtime)
         """
         # Backwards-compat: callers may pass a DuckDB path.
         self.db_path = db_path
-        if os.getenv('DATABASE_BACKEND', 'duckdb').lower() == 'duckdb' and not os.getenv('DUCKDB_PATH'):
+        if os.getenv('DATABASE_BACKEND', 'postgresql').lower() == 'duckdb' and not os.getenv('DUCKDB_PATH'):
             os.environ['DUCKDB_PATH'] = db_path
         
     def evaluate_predictions(

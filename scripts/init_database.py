@@ -78,7 +78,7 @@ def main():
         print("Database initialization completed successfully!")
         print("=" * 60)
         print("\nNext steps:")
-        print("1. Run 'python scripts/migrate_pickle_to_duckdb.py' to migrate existing data")
+        print("1. Run data refresh jobs to populate PostgreSQL tables")
         print("2. Run your Streamlit app: 'streamlit run app.py'")
         
     except Exception as e:

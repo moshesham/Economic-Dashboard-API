@@ -34,7 +34,7 @@ def main():
     logger.info("=" * 60)
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Log Level: {settings.LOG_LEVEL}")
-    logger.info(f"Database Path: {settings.DUCKDB_PATH}")
+    logger.info(f"Database backend: {settings.DATABASE_BACKEND}")
     
     # Register signal handlers
     signal.signal(signal.SIGTERM, signal_handler)

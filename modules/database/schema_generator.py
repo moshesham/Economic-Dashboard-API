@@ -244,7 +244,7 @@ def create_all_tables():
     """
     import os
     
-    backend_type = os.getenv('DATABASE_BACKEND', 'duckdb').lower()
+    backend_type = os.getenv('DATABASE_BACKEND', 'postgresql').lower()
     
     if backend_type == 'postgresql':
         create_all_tables_postgres()

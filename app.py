@@ -96,7 +96,7 @@ DASHBOARD_CATALOG = [
         "path": "pages/10_Margin_Call_Risk_Monitor.py",
         "group": "Risk and Signals",
         "status": "Partial",
-        "data_mode": "DuckDB + live volatility feeds",
+        "data_mode": "PostgreSQL + live volatility feeds",
         "blocker": "Requires initialized local DB and fresh market inputs",
     },
     {
@@ -152,7 +152,7 @@ DASHBOARD_CATALOG = [
         "path": "pages/17_ML_Predictions_Explorer.py",
         "group": "Research and ML",
         "status": "Partial",
-        "data_mode": "Local models + DuckDB OHLCV",
+        "data_mode": "Local models + PostgreSQL OHLCV",
         "blocker": "Requires seeded OHLCV and trained models",
     },
     {

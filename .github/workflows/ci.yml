@@ -64,11 +64,11 @@ jobs:
       - name: Run tests
         env:
           REDIS_URL: redis://localhost:6379/0
-          DATABASE_BACKEND: duckdb
-          DUCKDB_PATH: ./data/duckdb/test.duckdb
+          DATABASE_BACKEND: postgresql
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
           ENVIRONMENT: test
         run: |
-          mkdir -p data/cache data/duckdb
+          mkdir -p data/cache
           pytest tests/ -v --tb=short --maxfail=1
 
       - name: Write summary

@@ -1,6 +1,6 @@
 """
 Data loading module for Economic Dashboard.
-Handles all data fetching from FRED and Yahoo Finance with DuckDB caching and offline support.
+Handles all data fetching from FRED and Yahoo Finance with database-backed caching and offline support.
 """
 
 try:
@@ -46,7 +46,7 @@ from core.config import (
 from modules.auth.credentials_manager import get_credentials_manager
 from modules.crypto_data import fetch_crypto_batch, load_offline_crypto_sample
 
-# Import DuckDB database functions
+# Import database query functions (backend selected by modules.database.factory)
 try:
     from modules.database import (
         get_db_connection,
@@ -56,10 +56,10 @@ try:
         insert_stock_data,
         insert_options_data
     )
-    DUCKDB_AVAILABLE = True
+    DB_BACKEND_AVAILABLE = True
 except ImportError:
-    DUCKDB_AVAILABLE = False
-    st.warning("DuckDB database module not available. Using legacy pickle caching.")
+    DB_BACKEND_AVAILABLE = False
+    st.warning("Database module not available. Using legacy pickle caching.")
 
 
 # Configure proxy if available (for GitHub Actions IP rotation)
@@ -242,8 +242,8 @@ def load_fred_data(series_ids: dict) -> pd.DataFrame:
     if is_offline_mode():
         return _load_offline_fred_data(series_ids)
 
-    # Try DuckDB first if available
-    if DUCKDB_AVAILABLE and 'get_fred_series' in globals():
+    # Try configured database backend first if available
+    if DB_BACKEND_AVAILABLE and 'get_fred_series' in globals():
         try:
             # Get data from DuckDB
             series_list = list(series_ids.values())
@@ -265,7 +265,7 @@ def load_fred_data(series_ids: dict) -> pd.DataFrame:
                 # Fresh local environments may not have DB tables yet; API fallback is expected.
                 pass
             else:
-                st.warning(f"Could not load from DuckDB: {e}. Falling back to API.")
+                st.warning(f"Could not load from database: {e}. Falling back to API.")
 
     # First, try to load from the centralized cache (updated daily by automation)
     centralized_cache = f"{get_cache_dir()}/fred_all_series.pkl"
@@ -332,8 +332,8 @@ def load_yfinance_data(tickers: dict, period: str = "5y") -> dict:
     if is_offline_mode():
         return _load_offline_yfinance_data(tickers, period)
 
-    # Try DuckDB first if available
-    if DUCKDB_AVAILABLE:
+    # Try configured database backend first if available
+    if DB_BACKEND_AVAILABLE:
         try:
             # Get data from DuckDB
             ticker_list = list(tickers.values())
@@ -358,7 +358,7 @@ def load_yfinance_data(tickers: dict, period: str = "5y") -> dict:
                 if result:
                     return result
         except Exception as e:
-            st.warning(f"Could not load from DuckDB: {e}. Falling back to API.")
+            st.warning(f"Could not load from database: {e}. Falling back to API.")
 
     # First, try to load from the centralized cache (updated daily by automation)
     centralized_cache = f"{get_cache_dir()}/yfinance_all_tickers.pkl"
@@ -714,7 +714,7 @@ def calculate_percentage_change(series_id: str, periods: int = 4) -> float | Non
 def load_options_data(ticker: str, start_date: Optional[str] = None, 
                      end_date: Optional[str] = None) -> pd.DataFrame:
     """
-    Load options data for a ticker from DuckDB or fetch from API.
+    Load options data for a ticker from database or fetch from API.
     
     Args:
         ticker: Stock ticker symbol
@@ -729,8 +729,8 @@ def load_options_data(ticker: str, start_date: Optional[str] = None,
         st.warning("Options data not available in offline mode")
         return pd.DataFrame()
     
-    # Try DuckDB first if available
-    if DUCKDB_AVAILABLE:
+    # Try configured database backend first if available
+    if DB_BACKEND_AVAILABLE:
         try:
             # Import here to avoid circular imports
             from modules.database.queries import get_options_data as db_get_options_data
@@ -739,7 +739,7 @@ def load_options_data(ticker: str, start_date: Optional[str] = None,
             if not db_data.empty:
                 return db_data
         except Exception as e:
-            st.warning(f"Could not load options from DuckDB: {e}. Falling back to API.")
+            st.warning(f"Could not load options from database: {e}. Falling back to API.")
     
     # Fetch from yfinance API
     try:
@@ -799,12 +799,12 @@ def load_options_data(ticker: str, start_date: Optional[str] = None,
         if all_options_data:
             result_df = pd.DataFrame(all_options_data)
             
-            # Save to DuckDB if available
-            if DUCKDB_AVAILABLE:
+            # Save to configured database backend if available
+            if DB_BACKEND_AVAILABLE:
                 try:
                     insert_options_data(result_df)
                 except Exception as e:
-                    st.warning(f"Could not save options data to DuckDB: {e}")
+                    st.warning(f"Could not save options data to database: {e}")
             
             return result_df
         
@@ -819,7 +819,7 @@ def load_options_data(ticker: str, start_date: Optional[str] = None,
 def load_technical_features(ticker: str, start_date: Optional[str] = None,
                            end_date: Optional[str] = None) -> pd.DataFrame:
     """
-    Load technical analysis features for a ticker from DuckDB or calculate them.
+    Load technical analysis features for a ticker from database or calculate them.
     
     Args:
         ticker: Stock ticker symbol
@@ -834,8 +834,8 @@ def load_technical_features(ticker: str, start_date: Optional[str] = None,
         st.warning("Technical features not available in offline mode")
         return pd.DataFrame()
     
-    # Try DuckDB first if available
-    if DUCKDB_AVAILABLE:
+    # Try configured database backend first if available
+    if DB_BACKEND_AVAILABLE:
         try:
             # Import here to avoid circular imports
             from modules.database.queries import get_technical_features as db_get_technical_features
@@ -844,7 +844,7 @@ def load_technical_features(ticker: str, start_date: Optional[str] = None,
             if not db_data.empty:
                 return db_data
         except Exception as e:
-            st.warning(f"Could not load technical features from DuckDB: {e}. Calculating from OHLCV.")
+            st.warning(f"Could not load technical features from database: {e}. Calculating from OHLCV.")
     
     # Calculate technical features from OHLCV data
     try:
@@ -922,13 +922,13 @@ def load_technical_features(ticker: str, start_date: Optional[str] = None,
         cols = ['ticker', 'date'] + [col for col in features_df.columns if col not in ['ticker', 'date']]
         features_df = features_df[cols]
         
-        # Save to DuckDB if available
-        if DUCKDB_AVAILABLE:
+        # Save to configured database backend if available
+        if DB_BACKEND_AVAILABLE:
             try:
                 from modules.database.queries import insert_technical_features
                 insert_technical_features(features_df)
             except Exception as e:
-                st.warning(f"Could not save technical features to DuckDB: {e}")
+                st.warning(f"Could not save technical features to database: {e}")
         
         return features_df
         

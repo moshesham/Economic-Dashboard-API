@@ -15,7 +15,7 @@ class FeatureStore:
     """
     Centralized feature computation and storage.
     
-    Features are computed once and cached in DuckDB for fast retrieval.
+    Features are computed once and cached in the configured database for fast retrieval.
     The API reads pre-computed features rather than computing on-demand.
     
     Feature Categories:
@@ -27,7 +27,7 @@ class FeatureStore:
     
     def __init__(self, db_path: Optional[str] = None):
         from modules.database import get_db_connection
-        self.db = get_db_connection(db_path)
+        self.db = get_db_connection()
         self._ensure_tables()
     
     def _ensure_tables(self):

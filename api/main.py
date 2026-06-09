@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Economic Dashboard API...")
     logger.info(f"Environment: {settings.ENVIRONMENT}")
-    logger.info(f"DuckDB Path: {settings.DUCKDB_PATH}")
+    logger.info(f"Database backend: {settings.DATABASE_BACKEND}")
     
     # Initialize database connection
     from modules.database import get_db_connection

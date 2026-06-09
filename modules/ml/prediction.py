@@ -65,19 +65,19 @@ class PredictionEngine:
     
     def __init__(
         self,
-        db_path: str = "data/duckdb/economic_dashboard.duckdb",
+        db_path: str = "",
         models_dir: str = "data/models"
     ):
         """
         Initialize the prediction engine.
         
         Args:
-            db_path: Path to DuckDB database
+            db_path: Legacy optional DB path (ignored for PostgreSQL-first runtime)
             models_dir: Directory containing trained models
         """
-        # Backwards-compat: callers may pass a DuckDB path.
+        # Backwards-compat: callers may still pass a DB file path.
         self.db_path = db_path
-        if os.getenv('DATABASE_BACKEND', 'duckdb').lower() == 'duckdb' and not os.getenv('DUCKDB_PATH'):
+        if os.getenv('DATABASE_BACKEND', 'postgresql').lower() == 'duckdb' and not os.getenv('DUCKDB_PATH'):
             os.environ['DUCKDB_PATH'] = db_path
         self.models_dir = Path(models_dir)
         # Instance cache is kept for backwards compatibility but prefers the LRU cache
