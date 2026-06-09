@@ -10,6 +10,11 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timedelta
 from modules.data_loader import load_yfinance_data
+try:
+    from modules.data_loader import load_crypto_data
+except ImportError:
+    def load_crypto_data(*args, **kwargs):
+        return {}
 from core.config import is_offline_mode
 
 
@@ -230,6 +235,60 @@ with tab_overview:
             fig.add_hline(y=100, line_dash="dash", line_color="gray", opacity=0.5)
             
             st.plotly_chart(fig, use_container_width=True)
+
+        st.divider()
+        st.markdown("#### ₿ Crypto Snapshot (Cross-Asset)")
+        with st.spinner("Loading crypto data..."):
+            crypto_data = load_crypto_data(
+                {
+                    'Bitcoin': 'bitcoin',
+                    'Ethereum': 'ethereum',
+                    'Solana': 'solana',
+                },
+                days=365,
+            )
+
+        if crypto_data:
+            c1, c2, c3 = st.columns(3)
+            for col, asset in zip([c1, c2, c3], ['Bitcoin', 'Ethereum', 'Solana']):
+                with col:
+                    series = crypto_data.get(asset)
+                    if series is None or series.empty:
+                        st.metric(asset, "N/A")
+                        continue
+                    close = series['Close'].dropna()
+                    if close.empty:
+                        st.metric(asset, "N/A")
+                        continue
+                    last_price = close.iloc[-1]
+                    base_price = close.iloc[0]
+                    pct = ((last_price - base_price) / base_price) * 100 if base_price else 0
+                    st.metric(asset, f"${last_price:,.2f}", delta=f"{pct:+.2f}%")
+
+            crypto_fig = go.Figure()
+            for asset, df_crypto in crypto_data.items():
+                if df_crypto.empty or 'Close' not in df_crypto.columns:
+                    continue
+                close = df_crypto['Close'].dropna()
+                if close.empty:
+                    continue
+                normalized = (close / close.iloc[0]) * 100
+                crypto_fig.add_trace(
+                    go.Scatter(x=normalized.index, y=normalized, mode='lines', name=asset)
+                )
+
+            if len(crypto_fig.data) > 0:
+                crypto_fig.update_layout(
+                    title='Normalized Crypto Performance (Base = 100)',
+                    xaxis_title='Date',
+                    yaxis_title='Normalized Price',
+                    template='plotly_dark',
+                    height=420,
+                )
+                crypto_fig.add_hline(y=100, line_dash='dash', line_color='gray', opacity=0.5)
+                st.plotly_chart(crypto_fig, use_container_width=True)
+            else:
+                st.info("Crypto data currently unavailable.")
     else:
         st.warning("Unable to load market data. Please try again later.")
 

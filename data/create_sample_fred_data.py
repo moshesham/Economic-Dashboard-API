@@ -12,7 +12,7 @@ def create_sample_fred_data():
     # Create date range for last 5 years
     end_date = datetime.now()
     start_date = end_date - timedelta(days=365*5)
-    dates = pd.date_range(start=start_date, end=end_date, freq='Q')
+    dates = pd.date_range(start=start_date, end=end_date, freq='QE')
 
     np.random.seed(42)  # For reproducible data
 

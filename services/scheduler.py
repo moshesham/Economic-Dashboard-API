@@ -13,6 +13,26 @@ from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED
 logger = logging.getLogger(__name__)
 
 
+FRED_SERIES_MAP = {
+    'GDP': 'GDP',
+    'Real GDP': 'GDPC1',
+    'Unemployment Rate': 'UNRATE',
+    'CPI': 'CPIAUCSL',
+    'Fed Funds': 'FEDFUNDS',
+    '10Y-2Y Spread': 'T10Y2Y',
+    '10Y Inflation Exp': 'T10YIE',
+    'BAA10Y': 'BAA10Y',
+    'VIX': 'VIXCLS',
+    '10Y Treasury': 'DGS10',
+}
+
+DEFAULT_CRYPTO_ASSETS = {
+    'Bitcoin': 'bitcoin',
+    'Ethereum': 'ethereum',
+    'Solana': 'solana',
+}
+
+
 class WorkerScheduler:
     """
     Background job scheduler for the Economic Dashboard.
@@ -137,6 +157,17 @@ class WorkerScheduler:
             replace_existing=True,
         )
         logger.info(f"Scheduled SEC refresh at {hour:02d}:{minute:02d}")
+
+    def add_crypto_refresh_job(self, hour: int = 1, minute: int = 30):
+        """Schedule daily crypto data refresh."""
+        self.scheduler.add_job(
+            self._refresh_crypto_data,
+            CronTrigger(hour=hour, minute=minute),
+            id='crypto_refresh',
+            name='Crypto Data Refresh',
+            replace_existing=True,
+        )
+        logger.info(f"Scheduled crypto refresh at {hour:02d}:{minute:02d}")
     
     # =========================================================================
     # Feature Computation Jobs
@@ -234,23 +265,28 @@ class WorkerScheduler:
     
     def _refresh_fred_data(self):
         """Refresh FRED economic indicators."""
-        from modules.data_loader import FREDDataLoader
+        from modules.ingestion import get_incremental_fetcher
         
         start_time = datetime.utcnow()
-        loader = FREDDataLoader()
-        
-        # Refresh all configured series
-        series_list = [
-            'GDP', 'GDPC1', 'UNRATE', 'CPIAUCSL', 'FEDFUNDS',
-            'T10Y2Y', 'T10YIE', 'BAA10Y', 'VIXCLS', 'DGS10'
-        ]
-        
-        for series_id in series_list:
-            try:
-                loader.fetch_series(series_id)
-                logger.debug(f"Refreshed FRED series: {series_id}")
-            except Exception as e:
-                logger.error(f"Failed to refresh {series_id}: {e}")
+        fetcher = get_incremental_fetcher()
+
+        try:
+            batch_df = fetcher.fetch_fred_batch_incremental(FRED_SERIES_MAP)
+            if batch_df.empty:
+                logger.info("FRED incremental refresh: no new rows")
+            else:
+                logger.info(
+                    "FRED incremental refresh fetched rows for %s series",
+                    len(batch_df.columns)
+                )
+        except Exception as e:
+            # Fallback to per-series fetch if batch call fails unexpectedly.
+            logger.warning("Batch FRED incremental refresh failed: %s", e)
+            for series_id in FRED_SERIES_MAP.values():
+                try:
+                    fetcher.fetch_fred_incremental(series_id)
+                except Exception as single_err:
+                    logger.error("Failed to refresh %s: %s", series_id, single_err)
         
         duration = (datetime.utcnow() - start_time).total_seconds()
         logger.info(f"FRED refresh completed in {duration:.2f}s")
@@ -258,21 +294,72 @@ class WorkerScheduler:
     
     def _refresh_stock_data(self):
         """Refresh stock price data."""
-        from modules.data_loader import StockDataLoader
+        from modules.ingestion import get_incremental_fetcher
         from modules.database import get_monitored_tickers
         
         start_time = datetime.utcnow()
-        loader = StockDataLoader()
+        fetcher = get_incremental_fetcher()
         tickers = get_monitored_tickers()
-        
+
         for ticker in tickers:
             try:
-                loader.fetch_latest(ticker)
+                fetcher.fetch_yfinance_incremental(ticker)
             except Exception as e:
                 logger.error(f"Failed to refresh {ticker}: {e}")
         
         duration = (datetime.utcnow() - start_time).total_seconds()
         logger.info(f"Stock refresh completed in {duration:.2f}s")
+        return duration
+
+    def _refresh_crypto_data(self):
+        """Refresh crypto market data and persist to DuckDB/PostgreSQL."""
+        from modules.crypto_data import fetch_crypto_batch
+        from modules.database.factory import get_backend
+
+        start_time = datetime.utcnow()
+        db = get_backend()
+
+        db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS crypto_ohlcv (
+                symbol VARCHAR,
+                date DATE,
+                close DOUBLE,
+                volume DOUBLE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (symbol, date)
+            )
+            """
+        )
+
+        market_data = fetch_crypto_batch(DEFAULT_CRYPTO_ASSETS, days=365)
+        inserted = 0
+
+        for symbol, df in market_data.items():
+            if df.empty:
+                continue
+            rows = df.reset_index().rename(columns={
+                'index': 'date',
+                'Date': 'date',
+                'Close': 'close',
+                'Volume': 'volume',
+            })
+            rows['symbol'] = symbol
+            rows = rows[['symbol', 'date', 'close', 'volume']]
+            db.insert_df(
+                rows,
+                table_name='crypto_ohlcv',
+                if_exists='append',
+                conflict_columns=['symbol', 'date']
+            )
+            inserted += len(rows)
+
+        duration = (datetime.utcnow() - start_time).total_seconds()
+        logger.info(
+            "Crypto refresh completed in %.2fs (%s rows upserted)",
+            duration,
+            inserted,
+        )
         return duration
     
     def _refresh_options_data(self):
@@ -443,6 +530,7 @@ def setup_all_jobs(scheduler: Optional[WorkerScheduler] = None):
     scheduler.add_stock_refresh_job(interval_minutes=5)
     scheduler.add_options_refresh_job(interval_minutes=15)
     scheduler.add_sec_refresh_job(hour=6, minute=0)
+    scheduler.add_crypto_refresh_job(hour=1, minute=30)
     
     # Feature computation
     scheduler.add_feature_computation_job(interval_minutes=30)

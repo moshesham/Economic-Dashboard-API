@@ -29,6 +29,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import date, datetime, timedelta
+from urllib.parse import urlencode
 from typing import Dict, Optional
 
 import pandas as pd
@@ -67,8 +68,8 @@ class IncrementalFetcher:
     def _get_db(self):
         if self._db is None:
             try:
-                from modules.database.factory import get_database_backend
-                self._db = get_database_backend()
+                from modules.database.factory import get_backend
+                self._db = get_backend()
             except Exception as exc:
                 logger.warning("Database backend unavailable: %s", exc)
         return self._db
@@ -142,8 +143,6 @@ class IncrementalFetcher:
         Returns a DataFrame with a DatetimeIndex and a column named
         ``series_id``.  Returns an empty DataFrame on failure.
         """
-        from pandas_datareader import data as pdr
-
         watermark = self.get_watermark("fred", series_id)
         if watermark is not None:
             start = watermark + timedelta(days=1)
@@ -158,8 +157,21 @@ class IncrementalFetcher:
 
         logger.info("FRED/%s: fetching %s → %s", series_id, start, end)
         try:
-            kwargs = {"api_key": api_key} if api_key else {}
-            df = pdr.DataReader(series_id, "fred", start=str(start), end=str(end), **kwargs)
+            params = {
+                "id": series_id,
+                "cosd": str(start),
+                "coed": str(end),
+            }
+            csv_url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?{urlencode(params)}"
+            df = pd.read_csv(csv_url)
+            df.columns = [str(c).lstrip("\ufeff").strip() for c in df.columns]
+            date_col = "DATE" if "DATE" in df.columns else "observation_date"
+            if date_col not in df.columns or series_id not in df.columns:
+                raise ValueError(f"Unexpected FRED CSV shape for {series_id}: {list(df.columns)}")
+
+            df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+            df[series_id] = pd.to_numeric(df[series_id], errors="coerce")
+            df = df.dropna(subset=[date_col, series_id]).set_index(date_col).sort_index()
             if df.empty:
                 return pd.DataFrame()
 
@@ -168,7 +180,8 @@ class IncrementalFetcher:
             # Persist into fred_data table
             db = self._get_db()
             if db is not None:
-                rows = df.reset_index().rename(columns={"DATE": "date", series_id: "value"})
+                rows = df.reset_index()
+                rows = rows.rename(columns={rows.columns[0]: "date", series_id: "value"})
                 rows["series_id"] = series_id
                 rows = rows[["series_id", "date", "value"]]
                 db.insert_df(

@@ -16,7 +16,7 @@ from modules.sentiment_analysis import (
     get_sentiment_summary,
     get_aggregated_sentiment
 )
-from core.config import is_offline_mode
+from core.config import is_offline_mode, can_use_offline_data
 
 # Page configuration
 st.set_page_config(
@@ -89,6 +89,25 @@ with st.sidebar:
 
 
 # Main content
+def load_offline_news_sentiment(symbol: str) -> pd.DataFrame:
+    """Load structured offline sentiment dataset for API-unavailable scenarios."""
+    sample_path = 'data/sample_news_sentiment_data.csv'
+    if not can_use_offline_data('news') or not os.path.exists(sample_path):
+        return pd.DataFrame()
+
+    try:
+        df = pd.read_csv(sample_path)
+        if 'published_at' in df.columns:
+            df['published_at'] = pd.to_datetime(df['published_at'], errors='coerce')
+        if 'symbol' in df.columns:
+            filtered = df[df['symbol'].astype(str).str.upper() == symbol.upper()].copy()
+            if not filtered.empty:
+                return filtered
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
 def display_sentiment_gauge(score: float, title: str = "Sentiment Score"):
     """Display a sentiment gauge chart."""
     fig = go.Figure(go.Indicator(
@@ -228,6 +247,12 @@ if analyze_button or 'analyzed_data' in st.session_state:
                 company_name=company_name if company_name else None,
                 days_back=days_back
             )
+
+            if news_df.empty:
+                fallback_news = load_offline_news_sentiment(symbol)
+                if not fallback_news.empty:
+                    st.info("Using structured offline news sentiment fallback dataset.")
+                    news_df = fallback_news
             
             if news_df.empty:
                 st.warning(f"No news articles found for {symbol}")

@@ -1,0 +1,21 @@
+"""Create sample structured SEC filings fallback data."""
+
+import pandas as pd
+
+
+def create_sample_sec_data() -> pd.DataFrame:
+    rows = [
+        ["0000320193", "AAPL", "10-K", "2025-11-01", "2025-09-30", "a10k2025.htm", "Annual report", "0000320193-25-000101"],
+        ["0000320193", "AAPL", "10-Q", "2026-02-03", "2025-12-31", "a10q2026q1.htm", "Quarterly report", "0000320193-26-000012"],
+        ["0000789019", "MSFT", "10-K", "2025-08-01", "2025-06-30", "msft-10k.htm", "Annual report", "0000789019-25-000087"],
+        ["0000789019", "MSFT", "8-K", "2026-04-15", "2026-04-15", "msft-8k.htm", "Current report", "0000789019-26-000044"],
+        ["0001318605", "TSLA", "10-K", "2026-01-28", "2025-12-31", "tsla-10k.htm", "Annual report", "0001318605-26-000021"],
+        ["0001652044", "GOOGL", "10-Q", "2026-05-02", "2026-03-31", "googl-10q.htm", "Quarterly report", "0001652044-26-000039"],
+    ]
+    return pd.DataFrame(rows, columns=["cik", "ticker", "form", "filingDate", "reportDate", "primaryDocument", "description", "accessionNumber"])
+
+
+if __name__ == "__main__":
+    df = create_sample_sec_data()
+    df.to_csv("data/sample_sec_filings_data.csv", index=False)
+    print(f"Created sample SEC filings dataset with {len(df)} rows")

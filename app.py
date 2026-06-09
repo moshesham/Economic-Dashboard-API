@@ -23,6 +23,183 @@ from modules.data_loader import (
 )
 from core.config import is_offline_mode, can_use_offline_data
 from modules.auth.credentials_manager import get_credentials_manager
+from modules.ingestion import get_incremental_fetcher
+
+
+DASHBOARD_CATALOG = [
+    {
+        "name": "GDP and Growth",
+        "path": "pages/1_GDP_and_Growth.py",
+        "group": "Macro Core",
+        "status": "Ready",
+        "data_mode": "Offline sample + FRED",
+        "blocker": "None",
+    },
+    {
+        "name": "Inflation and Prices",
+        "path": "pages/2_Inflation_and_Prices.py",
+        "group": "Macro Core",
+        "status": "Ready",
+        "data_mode": "Offline sample + FRED",
+        "blocker": "None",
+    },
+    {
+        "name": "Employment and Wages",
+        "path": "pages/3_Employment_and_Wages.py",
+        "group": "Macro Core",
+        "status": "Ready",
+        "data_mode": "Offline sample + FRED",
+        "blocker": "None",
+    },
+    {
+        "name": "Consumer and Housing",
+        "path": "pages/4_Consumer_and_Housing.py",
+        "group": "Macro Core",
+        "status": "Ready",
+        "data_mode": "Offline sample + FRED",
+        "blocker": "None",
+    },
+    {
+        "name": "Markets and Rates",
+        "path": "pages/5_Markets_and_Rates.py",
+        "group": "Macro Core",
+        "status": "Ready",
+        "data_mode": "Offline sample + FRED",
+        "blocker": "None",
+    },
+    {
+        "name": "Market Indices",
+        "path": "pages/7_Market_Indices.py",
+        "group": "Market Intelligence",
+        "status": "Partial",
+        "data_mode": "Local sample + Yahoo Finance",
+        "blocker": "Freshness depends on live market API",
+    },
+    {
+        "name": "Stock Technical Analysis",
+        "path": "pages/8_Stock_Technical_Analysis.py",
+        "group": "Market Intelligence",
+        "status": "API Required",
+        "data_mode": "Yahoo Finance live",
+        "blocker": "Needs live OHLCV coverage for selected tickers",
+    },
+    {
+        "name": "News Sentiment",
+        "path": "pages/9_News_Sentiment.py",
+        "group": "Market Intelligence",
+        "status": "API Required",
+        "data_mode": "News + trends live APIs",
+        "blocker": "No bundled offline news corpus",
+    },
+    {
+        "name": "Margin Call Risk Monitor",
+        "path": "pages/10_Margin_Call_Risk_Monitor.py",
+        "group": "Risk and Signals",
+        "status": "Partial",
+        "data_mode": "DuckDB + live volatility feeds",
+        "blocker": "Requires initialized local DB and fresh market inputs",
+    },
+    {
+        "name": "Financial Health Scorer",
+        "path": "pages/11_Financial_Health_Scorer.py",
+        "group": "Risk and Signals",
+        "status": "API Required",
+        "data_mode": "SEC live APIs",
+        "blocker": "No offline SEC filing bundle",
+    },
+    {
+        "name": "Sector Rotation Monitor",
+        "path": "pages/12_Sector_Rotation_Monitor.py",
+        "group": "Risk and Signals",
+        "status": "API Required",
+        "data_mode": "Sector ETF live prices",
+        "blocker": "Needs broad, fresh sector price coverage",
+    },
+    {
+        "name": "Insider Trading Tracker",
+        "path": "pages/13_Insider_Trading_Tracker.py",
+        "group": "Risk and Signals",
+        "status": "API Required",
+        "data_mode": "SEC Form 4 live APIs",
+        "blocker": "Depends on SEC access and rate limits",
+    },
+    {
+        "name": "Economic Indicators Deep Dive",
+        "path": "pages/14_Economic_Indicators_Deep_Dive.py",
+        "group": "Research and ML",
+        "status": "Ready",
+        "data_mode": "Offline sample + FRED",
+        "blocker": "None",
+    },
+    {
+        "name": "SEC Data Explorer",
+        "path": "pages/15_SEC_Data_Explorer.py",
+        "group": "Research and ML",
+        "status": "API Required",
+        "data_mode": "SEC live APIs",
+        "blocker": "No offline filing data",
+    },
+    {
+        "name": "Recession Probability",
+        "path": "pages/16_Recession_Probability.py",
+        "group": "Research and ML",
+        "status": "Partial",
+        "data_mode": "FRED + market + local model artifacts",
+        "blocker": "Needs model artifacts and market data freshness",
+    },
+    {
+        "name": "ML Predictions Explorer",
+        "path": "pages/17_ML_Predictions_Explorer.py",
+        "group": "Research and ML",
+        "status": "Partial",
+        "data_mode": "Local models + DuckDB OHLCV",
+        "blocker": "Requires seeded OHLCV and trained models",
+    },
+    {
+        "name": "API Key Management",
+        "path": "pages/6_API_Key_Management.py",
+        "group": "Admin",
+        "status": "Ready",
+        "data_mode": "Local configuration only",
+        "blocker": "None",
+    },
+]
+
+
+def render_navigation_hub() -> None:
+    """Render grouped page links for faster exploration."""
+    st.markdown('<div class="section-header"><h3>🗂️ Navigation Hub</h3></div>', unsafe_allow_html=True)
+    st.caption("Start with Macro Core, then branch into market, risk, and ML workflows.")
+
+    groups = ["Macro Core", "Market Intelligence", "Risk and Signals", "Research and ML", "Admin"]
+    tabs = st.tabs(groups)
+
+    for idx, group in enumerate(groups):
+        with tabs[idx]:
+            for item in DASHBOARD_CATALOG:
+                if item["group"] != group:
+                    continue
+                c1, c2, c3 = st.columns([4, 2, 3])
+                c1.page_link(item["path"], label=item["name"], icon="➡️")
+                c2.write(f"**{item['status']}**")
+                c3.caption(item["data_mode"])
+
+
+def render_data_readiness_matrix() -> None:
+    """Show users what works locally versus what needs API access."""
+    st.markdown('<div class="section-header"><h3>✅ Data Readiness Matrix</h3></div>', unsafe_allow_html=True)
+    readiness_df = pd.DataFrame(DASHBOARD_CATALOG)[
+        ["group", "name", "status", "data_mode", "blocker"]
+    ].rename(
+        columns={
+            "group": "Group",
+            "name": "Dashboard",
+            "status": "Status",
+            "data_mode": "Data Mode",
+            "blocker": "Notes",
+        }
+    )
+    st.dataframe(readiness_df, width="stretch", hide_index=True)
 
 # Page configuration
 st.set_page_config(
@@ -490,7 +667,11 @@ with col3:
     """, unsafe_allow_html=True)
 
 st.markdown("")
-st.info("💡 **Tip:** Use the sidebar to navigate between different analytics modules")
+st.info("💡 **Tip:** Start in Macro Core tabs, then use the readiness matrix to know which pages are API-blocked.")
+
+render_navigation_hub()
+st.divider()
+render_data_readiness_matrix()
 
 # Professional Footer
 st.markdown("""
@@ -523,6 +704,22 @@ with st.sidebar:
     - 🏠 **Housing** — Starts, mortgage rates
     - 📈 **Markets** — Indices, yields, volatility
     """)
+
+    st.markdown("### 🚀 Quick Launch")
+    with st.expander("Macro Core", expanded=True):
+        for page in DASHBOARD_CATALOG:
+            if page["group"] == "Macro Core":
+                st.page_link(page["path"], label=page["name"], icon="📍")
+
+    with st.expander("Research and ML"):
+        for page in DASHBOARD_CATALOG:
+            if page["group"] == "Research and ML":
+                st.page_link(page["path"], label=page["name"], icon="🧠")
+
+    with st.expander("API-dependent pages"):
+        for page in DASHBOARD_CATALOG:
+            if page["status"] == "API Required":
+                st.page_link(page["path"], label=page["name"], icon="🔒")
 
     st.divider()
     
@@ -559,6 +756,35 @@ with st.sidebar:
         }
         for category, count in metrics_data.items():
             st.markdown(f"• {category}: {count} series")
+
+    with st.expander("⏱️ Data Freshness Monitor"):
+        try:
+            fetcher = get_incremental_fetcher()
+            watermarks = fetcher.get_all_watermarks()
+            if watermarks.empty:
+                st.caption("No watermark records yet. Run scheduled refresh jobs first.")
+            else:
+                watermarks['last_fetched_date'] = pd.to_datetime(watermarks['last_fetched_date'], errors='coerce')
+                latest_per_source = watermarks.sort_values('last_fetched_date').groupby('source').tail(1)
+                for _, row in latest_per_source.sort_values('source').iterrows():
+                    source = str(row['source'])
+                    status = str(row.get('status', 'unknown')).lower()
+                    latest_date = row.get('last_fetched_date')
+                    date_txt = latest_date.strftime('%Y-%m-%d') if pd.notna(latest_date) else 'N/A'
+                    records = int(row.get('records_fetched', 0) or 0)
+
+                    if status == 'ok':
+                        st.success(f"{source}: {date_txt} ({records} new)")
+                    elif status == 'error':
+                        st.error(f"{source}: last run failed")
+                    else:
+                        st.warning(f"{source}: status {status}")
+
+                stale = fetcher.get_stale_series(max_age_days=2)
+                if not stale.empty:
+                    st.warning(f"{len(stale)} series are older than 2 days")
+        except Exception as e:
+            st.caption(f"Freshness monitor unavailable: {e}")
 
     st.divider()
     

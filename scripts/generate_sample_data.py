@@ -14,7 +14,10 @@ def generate_sample_data():
     scripts = [
         'data/create_sample_fred_data.py',
         'data/create_sample_yfinance_data.py',
-        'data/create_sample_world_bank_data.py'
+        'data/create_sample_world_bank_data.py',
+        'data/create_sample_crypto_data.py',
+        'data/create_sample_news_sentiment_data.py',
+        'data/create_sample_sec_filings_data.py',
     ]
 
     for script in scripts:

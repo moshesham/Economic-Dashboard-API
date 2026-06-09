@@ -114,7 +114,10 @@ def can_use_offline_data(source: str) -> bool:
         'fred': os.path.exists('data/sample_fred_data.csv'),
         'yfinance': any(f.startswith('sample_') and f.endswith('_data.csv')
                        for f in os.listdir('data/') if os.path.isfile(os.path.join('data', f))),
-        'world_bank': os.path.exists('data/sample_world_bank_gdp.csv')
+        'world_bank': os.path.exists('data/sample_world_bank_gdp.csv'),
+        'crypto': os.path.exists('data/sample_crypto_data.csv'),
+        'news': os.path.exists('data/sample_news_sentiment_data.csv'),
+        'sec': os.path.exists('data/sample_sec_filings_data.csv'),
     }
     return sample_data_available.get(source, False)
 
@@ -135,6 +138,21 @@ DATA_SOURCES = {
         'online': True,
         'offline_file': 'data/sample_world_bank_gdp.csv',
         'cache_file': f'{settings.CACHE_DIR}/world_bank_cache.pkl'
+    },
+    'crypto': {
+        'online': True,
+        'offline_file': 'data/sample_crypto_data.csv',
+        'cache_file': f'{settings.CACHE_DIR}/crypto_cache.pkl'
+    },
+    'news': {
+        'online': True,
+        'offline_file': 'data/sample_news_sentiment_data.csv',
+        'cache_file': f'{settings.CACHE_DIR}/news_cache.pkl'
+    },
+    'sec': {
+        'online': True,
+        'offline_file': 'data/sample_sec_filings_data.csv',
+        'cache_file': f'{settings.CACHE_DIR}/sec_cache.pkl'
     }
 }
 

@@ -35,12 +35,14 @@ import os
 import pickle
 import time
 from typing import Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from core.config import (
     is_offline_mode, can_use_offline_data, get_cache_dir,
     ensure_cache_dir, CACHE_EXPIRY_HOURS, YFINANCE_RATE_LIMIT_DELAY,
     YFINANCE_BATCH_SIZE, YFINANCE_CACHE_HOURS
 )
 from modules.auth.credentials_manager import get_credentials_manager
+from modules.crypto_data import fetch_crypto_batch, load_offline_crypto_sample
 
 # Import DuckDB database functions
 try:
@@ -329,47 +331,51 @@ def load_yfinance_data(tickers: dict, period: str = "5y") -> dict:
         if all(name in cached_data for name in tickers.keys()):
             return cached_data
 
-    # Load from API with rate limiting
+    def _download_single_ticker(name: str, ticker: str) -> tuple[str, pd.DataFrame | None, str | None]:
+        try:
+            data = yf.download(ticker, period=period, progress=False, auto_adjust=True)
+            if data is not None and not data.empty:
+                if isinstance(data.columns, pd.MultiIndex):
+                    data.columns = data.columns.get_level_values(0)
+                return name, data, None
+            return name, None, f"No data available for {name} ({ticker})"
+        except Exception as exc:
+            return name, None, str(exc)
+
+    # Load from API with batch-level rate limiting and parallel ticker fetches
     try:
         result = {}
         ticker_list = list(tickers.items())
         total_tickers = len(ticker_list)
-        
-        # Process in batches to avoid rate limiting
+
+        # Process in batches to avoid rate limiting while keeping each batch parallel.
         for i in range(0, total_tickers, YFINANCE_BATCH_SIZE):
             batch = ticker_list[i:i + YFINANCE_BATCH_SIZE]
-            
-            for name, ticker in batch:
-                try:
-                    # Add delay between requests to respect rate limits
-                    if i > 0 or result:  # Don't delay on first request
-                        time.sleep(YFINANCE_RATE_LIMIT_DELAY)
-                    
-                    # Download with auto_adjust=True to avoid FutureWarning
-                    data = yf.download(ticker, period=period, progress=False, auto_adjust=True)
-                    
-                    if data is not None and not data.empty:
-                        # Handle MultiIndex columns for single ticker
-                        if isinstance(data.columns, pd.MultiIndex):
-                            data.columns = data.columns.get_level_values(0)
+
+            if i > 0:
+                time.sleep(YFINANCE_RATE_LIMIT_DELAY)
+
+            with ThreadPoolExecutor(max_workers=min(len(batch), YFINANCE_BATCH_SIZE)) as pool:
+                futures = [pool.submit(_download_single_ticker, name, ticker) for name, ticker in batch]
+                for fut in as_completed(futures):
+                    name, data, error_msg = fut.result()
+                    if data is not None:
                         result[name] = data
-                    else:
-                        st.warning(f"No data available for {name} ({ticker})")
-                except Exception as e:
-                    error_msg = str(e)
-                    # Provide more specific error messages
+                        continue
+
+                    if not error_msg:
+                        continue
+
                     if "Rate limit" in error_msg or "Too Many Requests" in error_msg:
-                        st.warning(f"⏱️ Rate limited on {name} ({ticker}). Using cached data if available.")
-                        # Try to load from any available cache, even if expired
+                        st.warning(f"⏱️ Rate limited on {name}. Using cached data if available.")
                         old_cached = _load_cached_data(cache_file, max_age_hours=168)  # 1 week
                         if old_cached is not None and isinstance(old_cached, dict) and name in old_cached:
                             result[name] = old_cached[name]
                             st.info(f"Using cached data for {name} (may be up to 1 week old)")
                     elif "No objects to concatenate" in error_msg:
-                        st.warning(f"Could not load {name} ({ticker}): Data not available for this period")
+                        st.warning(f"Could not load {name}: Data not available for this period")
                     else:
-                        st.warning(f"Could not load {name} ({ticker}): {error_msg}")
-                    continue
+                        st.warning(f"Could not load {name}: {error_msg}")
 
         if result:
             # Save to cache with current timestamp
@@ -382,6 +388,56 @@ def load_yfinance_data(tickers: dict, period: str = "5y") -> dict:
         if can_use_offline_data('yfinance'):
             st.info("Falling back to offline data")
             return _load_offline_yfinance_data(tickers, period)
+        return {}
+
+
+@st.cache_data(ttl=3600)
+def load_crypto_data(assets: dict | None = None, days: int = 365) -> dict:
+    """
+    Load crypto market data from CoinGecko with offline fallback.
+
+    Args:
+        assets: Dict label -> CoinGecko coin id (e.g. {'Bitcoin': 'bitcoin'})
+        days: Number of daily points to request.
+
+    Returns:
+        Dict[label, DataFrame] with Close/Volume columns and DatetimeIndex.
+    """
+    assets = assets or {
+        'Bitcoin': 'bitcoin',
+        'Ethereum': 'ethereum',
+        'Solana': 'solana',
+    }
+
+    if is_offline_mode() and can_use_offline_data('crypto'):
+        sample = load_offline_crypto_sample()
+        if sample.empty:
+            return {}
+        result = {}
+        for label in assets.keys():
+            subset = sample[sample['symbol'] == label].copy()
+            if subset.empty:
+                continue
+            subset = subset.sort_values('date').set_index('date')
+            result[label] = subset.rename(columns={'close': 'Close', 'volume': 'Volume'})[['Close', 'Volume']]
+        return result
+
+    try:
+        return fetch_crypto_batch(assets, days=days)
+    except Exception as e:
+        st.warning(f"Could not load crypto data: {e}")
+        if can_use_offline_data('crypto'):
+            sample = load_offline_crypto_sample()
+            result = {}
+            for label in assets.keys():
+                subset = sample[sample['symbol'] == label].copy()
+                if subset.empty:
+                    continue
+                subset = subset.sort_values('date').set_index('date')
+                result[label] = subset.rename(columns={'close': 'Close', 'volume': 'Volume'})[['Close', 'Volume']]
+            if result:
+                st.info("Using offline crypto sample data")
+            return result
         return {}
 
 

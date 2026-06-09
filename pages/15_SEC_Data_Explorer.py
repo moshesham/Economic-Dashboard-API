@@ -9,6 +9,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from typing import Optional
+import os
+
+from core.config import can_use_offline_data, is_offline_mode
 
 # Import SEC data loader
 try:
@@ -49,6 +52,31 @@ st.title("📄 SEC EDGAR Data Explorer")
 st.markdown("""
 Explore SEC filings, financial statements, and company data from the SEC EDGAR database.
 """)
+
+
+def load_offline_sec_filings() -> pd.DataFrame:
+    """Load structured offline SEC filing fallback dataset."""
+    sample_path = 'data/sample_sec_filings_data.csv'
+    if not can_use_offline_data('sec') or not os.path.exists(sample_path):
+        return pd.DataFrame()
+    try:
+        df = pd.read_csv(sample_path)
+        for col in ['filingDate', 'reportDate']:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors='coerce')
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+def lookup_offline_cik(ticker: str) -> Optional[str]:
+    df = load_offline_sec_filings()
+    if df.empty or 'ticker' not in df.columns or 'cik' not in df.columns:
+        return None
+    subset = df[df['ticker'].astype(str).str.upper() == ticker.upper()]
+    if subset.empty:
+        return None
+    return str(subset.iloc[0]['cik']).zfill(10)
 
 if not SEC_AVAILABLE:
     st.error(f"SEC data module not available: {SEC_ERROR}")
@@ -103,6 +131,8 @@ if search_method == "Ticker Symbol":
     if ticker_input:
         with st.spinner(f"Looking up {ticker_input}..."):
             cik = lookup_cik(ticker_input)
+            if not cik:
+                cik = lookup_offline_cik(ticker_input)
             if cik:
                 st.sidebar.success(f"Found CIK: {cik}")
             else:
@@ -375,6 +405,18 @@ with tab3:
         
         with st.spinner("Loading filings..."):
             filings_df = get_recent_filings(cik, form_types=filing_types if filing_types else None)
+
+            if filings_df.empty:
+                offline_filings = load_offline_sec_filings()
+                if not offline_filings.empty:
+                    if 'cik' in offline_filings.columns:
+                        filings_df = offline_filings[
+                            offline_filings['cik'].astype(str).str.zfill(10) == str(cik).zfill(10)
+                        ].copy()
+                    else:
+                        filings_df = offline_filings.copy()
+                    if not filings_df.empty:
+                        st.info("Using structured offline SEC filings fallback dataset.")
             
             if not filings_df.empty:
                 # Display summary
@@ -478,6 +520,10 @@ with tab4:
         # Load company count
         with st.spinner("Loading statistics..."):
             tickers_df = get_company_tickers()
+            if tickers_df.empty:
+                offline_filings = load_offline_sec_filings()
+                if not offline_filings.empty:
+                    tickers_df = offline_filings[['ticker']].dropna().drop_duplicates()
             if not tickers_df.empty:
                 st.metric("Registered Companies", f"{len(tickers_df):,}")
         
