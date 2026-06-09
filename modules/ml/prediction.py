@@ -8,6 +8,7 @@ Provides confidence scoring and ensemble agreement metrics.
 import os
 import pandas as pd
 import numpy as np
+import json
 from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Any
@@ -150,7 +151,9 @@ class PredictionEngine:
         ticker: str,
         model_path: Optional[str] = None,
         model_type: str = 'ensemble',
-        as_of_date: Optional[str] = None
+        as_of_date: Optional[str] = None,
+        store_result: bool = False,
+        horizon_days: int = 5
     ) -> Dict[str, Any]:
         """
         Generate prediction for a ticker.
@@ -222,11 +225,17 @@ class PredictionEngine:
             'probability': float(probabilities[1]),
             'confidence': confidence,
             'model_type': model_type,
+            'model_version': model_type,
             'model_path': model_path,
             'prediction_date': datetime.now().isoformat(),
             'as_of_date': as_of_date or datetime.now().date().isoformat(),
+            'target_date': (pd.to_datetime(as_of_date or datetime.now().date()) + timedelta(days=horizon_days)).date().isoformat(),
+            'horizon_days': horizon_days,
             'feature_importance': feature_importance
         }
+
+        if store_result:
+            self.save_prediction(result, horizon_days=horizon_days)
         
         logger.info(f"{ticker} prediction: {result['prediction_label']} "
                    f"(confidence: {confidence:.2%})")
@@ -318,7 +327,9 @@ class PredictionEngine:
         self,
         ticker: str,
         model_types: List[str] = ['xgboost', 'lightgbm', 'ensemble'],
-        as_of_date: Optional[str] = None
+        as_of_date: Optional[str] = None,
+        store_result: bool = False,
+        horizon_days: int = 5
     ) -> Dict[str, Any]:
         """
         Generate predictions using multiple models and combine results.
@@ -370,15 +381,22 @@ class PredictionEngine:
             'num_models': len(predictions),
             'model_predictions': model_results,
             'prediction_date': datetime.now().isoformat(),
-            'as_of_date': as_of_date or datetime.now().date().isoformat()
+            'as_of_date': as_of_date or datetime.now().date().isoformat(),
+            'model_type': 'ensemble',
+            'model_version': 'ensemble',
+            'target_date': (pd.to_datetime(as_of_date or datetime.now().date()) + timedelta(days=horizon_days)).date().isoformat(),
+            'horizon_days': horizon_days,
         }
+
+        if store_result:
+            self.save_prediction(result, horizon_days=horizon_days)
         
         logger.info(f"{ticker} ensemble: {result['ensemble_label']} "
                    f"(agreement: {agreement:.2%}, {votes_up}/{len(predictions)} models)")
         
         return result
     
-    def save_prediction(self, prediction: Dict[str, Any]) -> None:
+    def save_prediction(self, prediction: Dict[str, Any], horizon_days: int = 5) -> None:
         """
         Save prediction to database.
         
@@ -386,46 +404,52 @@ class PredictionEngine:
             prediction: Prediction dictionary from predict() or predict_ensemble()
         """
         db = get_db_connection()
-        backend_name = get_backend().__class__.__name__
-
-        # Only persist for PostgreSQL schema (DuckDB schema differs across versions in this repo).
-        if backend_name != 'PostgreSQLBackend':
-            logger.info("Skipping prediction persistence for non-PostgreSQL backend")
-            return
 
         ticker = prediction['ticker']
         prediction_date = pd.to_datetime(prediction.get('as_of_date') or datetime.utcnow().date()).date()
-        horizon_days = 5
-        target_date = prediction_date + timedelta(days=horizon_days)
-        model_name = prediction.get('model_type', 'ensemble')
-        predicted_direction = int(prediction.get('prediction', prediction.get('ensemble_prediction', 0)))
-        confidence = float(prediction.get('confidence', prediction.get('agreement_score', 0.5)))
-        feature_version = 'ohlcv_fe_v1'
+        target_date = pd.to_datetime(prediction.get('target_date') or (prediction_date + timedelta(days=horizon_days))).date()
+        model_version = prediction.get('model_version') or prediction.get('model_type') or 'ensemble'
+        predicted_direction = bool(int(prediction.get('prediction', prediction.get('ensemble_prediction', 0))))
+        predicted_probability = float(
+            prediction.get('probability')
+            or prediction.get('probability_up')
+            or prediction.get('avg_probability_up')
+            or prediction.get('ensemble_prob')
+            or prediction.get('agreement_score', 0.5)
+        )
 
-        sql = """
-        INSERT INTO ml_predictions (
-            ticker, prediction_date, target_date, horizon_days, model_name,
-            predicted_return, predicted_direction, confidence, feature_version
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (ticker, prediction_date, target_date, model_name)
-        DO UPDATE SET
-            predicted_direction = EXCLUDED.predicted_direction,
-            confidence = EXCLUDED.confidence,
-            feature_version = EXCLUDED.feature_version
-        """
-        db.execute(
-            sql,
-            (
-                ticker,
-                prediction_date,
-                target_date,
-                horizon_days,
-                model_name,
-                None,
-                predicted_direction,
-                confidence,
-                feature_version,
-            ),
+        xgboost_prob = prediction.get('xgboost_prob')
+        lightgbm_prob = prediction.get('lightgbm_prob')
+        lstm_prob = prediction.get('lstm_prob')
+        ensemble_prob = prediction.get('ensemble_prob', prediction.get('probability'))
+        confidence_score = float(prediction.get('confidence', prediction.get('agreement_score', 0.5)))
+
+        top_features = prediction.get('feature_importance') or prediction.get('top_features')
+        if isinstance(top_features, (dict, list)):
+            top_features = json.dumps(top_features)
+
+        payload = pd.DataFrame([
+            {
+                'ticker': ticker,
+                'prediction_date': prediction_date,
+                'target_date': target_date,
+                'model_version': model_version,
+                'predicted_direction': predicted_direction,
+                'predicted_probability': predicted_probability,
+                'xgboost_prob': xgboost_prob,
+                'lightgbm_prob': lightgbm_prob,
+                'lstm_prob': lstm_prob,
+                'ensemble_prob': ensemble_prob,
+                'confidence_score': confidence_score,
+                'top_features': top_features,
+            }
+        ])
+
+        db.insert_df(
+            payload,
+            'ml_predictions',
+            if_exists='append',
+            conflict_columns=['ticker', 'prediction_date', 'model_version']
         )
     
     def batch_predict(
@@ -490,18 +514,35 @@ class PredictionEngine:
         """
         db = get_db_connection()
 
-        query = f"""
-        SELECT *
+        query = """
+        SELECT
+            ticker,
+            prediction_date,
+            target_date,
+            model_version,
+            predicted_direction,
+            predicted_probability,
+            xgboost_prob,
+            lightgbm_prob,
+            lstm_prob,
+            ensemble_prob,
+            confidence_score,
+            top_features,
+            created_at
         FROM ml_predictions
-        WHERE ticker = '{ticker}'
+        WHERE ticker = ?
         """
 
+        params: List[Any] = [ticker]
         if start_date:
-            query += f" AND prediction_date >= '{start_date}'"
+            query += " AND prediction_date >= ?"
+            params.append(start_date)
         if end_date:
-            query += f" AND prediction_date <= '{end_date}'"
+            query += " AND prediction_date <= ?"
+            params.append(end_date)
         if prediction_type:
-            query += f" AND model_name = '{prediction_type}'"
+            query += " AND model_version = ?"
+            params.append(prediction_type)
 
-        query += " ORDER BY prediction_date DESC"
-        return db.query(query)
+        query += " ORDER BY prediction_date DESC, model_version"
+        return db.query(query, tuple(params))

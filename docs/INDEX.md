@@ -4,10 +4,8 @@ Use this index to navigate the project documentation.
 
 ## Planning
 
-- **`EXECUTIVE_SUMMARY.md`**: High-level project review, priorities, and action plan
-- **`PROJECT_IMPROVEMENT_PLAN.md`**: Detailed roadmap for engineering improvements
-- **`DATA_PRODUCTS_STRATEGY.md`**: Data product catalog and monetization strategy
-- **`IMPLEMENTATION_CHECKLIST.md`**: Actionable checklist for phased execution
+- Planning artifacts were removed as part of repository slimming.
+- Use `README.md` and operational docs for the current source of truth.
 
 ## Getting Started
 
@@ -26,7 +24,6 @@ Use this index to navigate the project documentation.
 - **`DEPLOYMENT_CHECKLIST.md`**: Production deployment guide
 - **`DATA_REFRESH_SLA.md`**: Data freshness and SLAs
 - **`AUTOMATED_DATA_REFRESH.md`**: Scheduler and jobs
-- **`WORKFLOW_IMPROVEMENTS.md`**: GitHub Actions workflows guide
 - **`DOCKER_PLAN.md`**: Docker deployment guide
 - **`ENVIRONMENTS.md`**: Environment configuration guide
 
@@ -35,8 +32,6 @@ Use this index to navigate the project documentation.
 - **`NEWS_SENTIMENT_FEATURE.md`**: Sentiment analysis pipeline
 - **`FEATURE_API_KEY_MANAGEMENT.md`**: API key management
 - **`IP_ROTATION_GUIDE.md`**: IP rotation for web scraping
-- **`IMPLEMENTATION_SUMMARY.md`**: Feature implementation details
 
 ## Development
 
-- **`AIRFLOW_GITHUB_INTEGRATION.md`**: Airflow and GitHub Actions integration

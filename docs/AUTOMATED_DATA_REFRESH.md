@@ -157,8 +157,7 @@ pip install apache-airflow-providers-email
 
 2. **Copy DAG file**:
    ```bash
-   # Link or copy the DAG to Airflow's DAG folder
-   cp airflow/dags/economic_data_refresh_dag.py ~/airflow/dags/
+   # Link or copy your DAG file to Airflow's DAG folder
    ```
 
 3. **Configure email notifications** (optional):
@@ -312,7 +311,7 @@ permissions:
 **DAG not showing up:**
 ```bash
 # Check for syntax errors
-python -m py_compile airflow/dags/economic_data_refresh_dag.py
+python -m py_compile <your_dag_file>.py
 
 # Refresh DAGs
 airflow dags list-import-errors

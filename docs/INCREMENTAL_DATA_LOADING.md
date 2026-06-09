@@ -21,7 +21,6 @@ are requested from the upstream API.
 | `modules/ingestion/__init__.py` | ➕ New package |
 | `modules/ingestion/incremental_fetcher.py` | ➕ `IncrementalFetcher` class |
 | `scripts/refresh_data_smart.py` | ✏️ Added `--incremental` flag + `run_incremental_refresh()` |
-| `airflow/dags/economic_data_refresh_dag.py` | ✏️ Added `incremental_data_refresh` task |
 | `alembic/versions/a1b2c3d4e5f6_*.py` | ➕ Alembic migration |
 
 ## Usage

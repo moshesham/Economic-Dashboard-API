@@ -60,11 +60,16 @@ async def get_stock_prediction(
     """
     try:
         from modules.ml.prediction import PredictionEngine
+        horizon_days = {"1d": 1, "5d": 5, "20d": 20}.get(horizon)
+        if horizon_days is None:
+            raise HTTPException(status_code=400, detail="Unsupported horizon. Use 1d, 5d, or 20d.")
         
         engine = PredictionEngine()
         prediction = engine.predict(
             ticker=ticker.upper(),
             model_type=model,
+            store_result=True,
+            horizon_days=horizon_days,
         )
         
         if not prediction:
@@ -115,20 +120,47 @@ async def get_prediction_history(
         from modules.database import get_db_connection
         
         db = get_db_connection()
-        result = db.query(f"""
-            SELECT 
-                prediction_date,
-                ticker,
-                model_type,
-                prediction,
-                probability,
-                actual_outcome,
-                CASE WHEN prediction = actual_outcome THEN 1 ELSE 0 END as correct
-            FROM ml_predictions
-            WHERE ticker = '{ticker.upper()}'
-              AND prediction_date >= CURRENT_DATE - INTERVAL '{days} days'
+        result = db.query(
+            """
+            WITH predictions AS (
+                SELECT
+                    p.ticker,
+                    p.prediction_date,
+                    p.target_date,
+                    p.model_version,
+                    p.predicted_direction,
+                    p.predicted_probability,
+                    p.confidence_score
+                FROM ml_predictions p
+                WHERE p.ticker = ?
+                  AND p.prediction_date >= CURRENT_DATE - ?
+            ),
+            joined AS (
+                SELECT
+                    p.prediction_date,
+                    p.target_date,
+                    p.ticker,
+                    p.model_version,
+                    p.predicted_direction,
+                    p.predicted_probability,
+                    p.confidence_score,
+                    entry.close AS price_at_prediction,
+                    target.close AS target_close,
+                    CASE WHEN target.close > entry.close THEN 1 ELSE 0 END AS actual_outcome,
+                    CASE WHEN p.predicted_direction = CASE WHEN target.close > entry.close THEN 1 ELSE 0 END THEN 1 ELSE 0 END AS correct
+                FROM predictions p
+                JOIN yfinance_ohlcv entry
+                  ON entry.ticker = p.ticker AND entry.date = p.prediction_date
+                JOIN yfinance_ohlcv target
+                  ON target.ticker = p.ticker AND target.date = p.target_date
+                WHERE entry.close IS NOT NULL AND target.close IS NOT NULL
+            )
+            SELECT *
+            FROM joined
             ORDER BY prediction_date DESC
-        """)
+            """,
+            (ticker.upper(), days)
+        )
         
         if result.empty:
             return {
@@ -179,7 +211,7 @@ async def get_multi_horizon_predictions(
         from modules.ml.multi_horizon import MultiHorizonPredictor
         
         predictor = MultiHorizonPredictor()
-        predictions = predictor.predict_all_horizons(ticker.upper())
+        predictions = predictor.predict_all_horizons(ticker.upper(), include_explanation=include_explanation, store_result=True)
         
         return {
             "ticker": ticker.upper(),

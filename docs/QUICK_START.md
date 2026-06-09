@@ -135,8 +135,6 @@ history = db.query("""
 
 ## 📚 Documentation
 
-- Full details: `MARGIN_RISK_FRAMEWORK.md`
-- Implementation: `IMPLEMENTATION_SUMMARY.md`
 - Code: `modules/features/leverage_metrics.py`
 - Code: `modules/features/margin_risk_composite.py`
 

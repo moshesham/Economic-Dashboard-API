@@ -211,62 +211,55 @@ class ModelEvaluator:
         """
         db = get_db_connection()
 
-        # Get predictions and actual outcomes
-        query = f"""
-            WITH predictions AS (
-                SELECT
-                    p.ticker,
-                    p.date as prediction_date,
-                    p.prediction,
-                    p.probability_up,
-                    p.probability_down,
-                    p.confidence
-                FROM ml_predictions p
-                WHERE p.ticker = '{ticker}'
-                AND p.prediction_type = '{prediction_type}'
-            ),
-            outcomes AS (
-                SELECT
-                    ticker,
-                    date,
-                    close,
-                    LEAD(close, 5) OVER (PARTITION BY ticker ORDER BY date) as future_close
-                FROM yfinance_ohlcv
-                WHERE ticker = '{ticker}'
-            ),
-            combined AS (
-                SELECT
-                    p.*,
-                    o.close as price_at_prediction,
-                    o.future_close,
-                    CASE
-                        WHEN o.future_close > o.close THEN 1
-                        ELSE 0
-                    END as actual_outcome,
-                    (o.future_close - o.close) / o.close as actual_return
-                FROM predictions p
-                JOIN outcomes o ON p.ticker = o.ticker AND p.prediction_date = o.date
-                WHERE o.future_close IS NOT NULL
-            )
-            SELECT * FROM combined
-            """
+        query = """
+            SELECT
+                p.ticker,
+                p.prediction_date,
+                p.target_date,
+                p.model_version,
+                p.predicted_direction AS prediction,
+                p.predicted_probability,
+                p.xgboost_prob,
+                p.lightgbm_prob,
+                p.lstm_prob,
+                p.ensemble_prob,
+                p.confidence_score AS confidence,
+                entry.close AS price_at_prediction,
+                target.close AS future_close,
+                CASE
+                    WHEN target.close > entry.close THEN 1
+                    ELSE 0
+                END AS actual_outcome,
+                (target.close - entry.close) / entry.close AS actual_return
+            FROM ml_predictions p
+            JOIN yfinance_ohlcv entry
+                ON p.ticker = entry.ticker
+               AND p.prediction_date = entry.date
+            JOIN yfinance_ohlcv target
+                ON p.ticker = target.ticker
+               AND p.target_date = target.date
+            WHERE p.ticker = ?
+              AND p.model_version = ?
+        """
 
+        params: List[Any] = [ticker, prediction_type]
         if start_date:
-            query += f" WHERE prediction_date >= '{start_date}'"
+            query += " AND p.prediction_date >= ?"
+            params.append(start_date)
         if end_date:
-            conjunction = "AND" if start_date else "WHERE"
-            query += f" {conjunction} prediction_date <= '{end_date}'"
+            query += " AND p.prediction_date <= ?"
+            params.append(end_date)
 
-        query += " ORDER BY prediction_date"
+        query += " ORDER BY p.prediction_date"
 
-        df = db.query(query)
+        df = db.query(query, tuple(params))
         if df.empty:
             raise ValueError(f"No predictions found for {ticker} ({prediction_type})")
 
         # Calculate classification metrics
         y_true = df['actual_outcome'].values
         y_pred = df['prediction'].values
-        y_proba = df[['probability_down', 'probability_up']].values
+        y_proba = np.column_stack([1 - df['predicted_probability'].astype(float), df['predicted_probability'].astype(float)])
 
         classification_metrics = self.evaluate_predictions(y_true, y_pred, y_proba)
 
