@@ -35,19 +35,23 @@ jobs:
       github.event_name == 'workflow_dispatch'
     
     steps:
-    - uses: actions/checkout@v4
-      with:
-        lfs: true
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
-        cache: 'pip'
+    - name: Checkout repository (policy-compliant)
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        git init .
+        git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+        git fetch --depth 1 origin "${GITHUB_SHA}"
+        git checkout -qf FETCH_HEAD
+        git lfs pull || true
+
+    - name: Prepare Python runtime (policy-compliant)
+      run: |
+        python3 --version
+        python3 -m pip install --upgrade pip
     
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
         pip install -r requirements.txt
     
     - name: Pull latest database
@@ -81,17 +85,10 @@ jobs:
           echo "Archive size: $ARCHIVE_SIZE"
         fi
     
-    - name: Upload snapshot artifacts
+    - name: Artifact note
       if: steps.snapshot.outcome == 'success'
-      uses: actions/upload-artifact@v4
-      with:
-        name: database-snapshot-${{ github.run_number }}
-        path: |
-          data/duckdb/snapshots/*.duckdb
-          data/duckdb/archives/*.parquet
-        retention-days: 30
-        compression-level: 9
-        if-no-files-found: warn
+      run: |
+        echo "Artifacts upload skipped due owner-only action policy" >> $GITHUB_STEP_SUMMARY
     
     - name: Create monthly snapshot (on last day of month)
       run: |
@@ -165,21 +162,23 @@ jobs:
       github.event_name == 'workflow_dispatch'
     
     steps:
-    - uses: actions/checkout@v4
-      with:
-        lfs: true
-        token: ${{ secrets.GITHUB_TOKEN }}
-        persist-credentials: true
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
-        cache: 'pip'
+    - name: Checkout repository (policy-compliant)
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        git init .
+        git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+        git fetch --depth 1 origin "${GITHUB_SHA}"
+        git checkout -qf FETCH_HEAD
+        git lfs pull || true
+
+    - name: Prepare Python runtime (policy-compliant)
+      run: |
+        python3 --version
+        python3 -m pip install --upgrade pip
     
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
         pip install -r requirements.txt
     
     - name: Pull latest database
@@ -202,12 +201,9 @@ jobs:
           echo "DB_SIZE=$DB_SIZE" >> $GITHUB_OUTPUT
         fi
     
-    - name: Upload archive artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: data-archives-${{ github.run_number }}
-        path: data/duckdb/archives/*.parquet
-        retention-days: 90
+    - name: Artifact note
+      run: |
+        echo "Artifacts upload skipped due owner-only action policy" >> $GITHUB_STEP_SUMMARY
     
     - name: Create summary
       if: always()
@@ -225,21 +221,23 @@ jobs:
     if: github.event.schedule == '0 2 * * 0' || github.event.inputs.operation == 'compact' || github.event.inputs.operation == 'all'
     
     steps:
-    - uses: actions/checkout@v4
-      with:
-        lfs: true
-        token: ${{ secrets.GITHUB_TOKEN }}
-        persist-credentials: true
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
-        cache: 'pip'
+    - name: Checkout repository (policy-compliant)
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        git init .
+        git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+        git fetch --depth 1 origin "${GITHUB_SHA}"
+        git checkout -qf FETCH_HEAD
+        git lfs pull || true
+
+    - name: Prepare Python runtime (policy-compliant)
+      run: |
+        python3 --version
+        python3 -m pip install --upgrade pip
     
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
         pip install -r requirements.txt
     
     - name: Pull latest database

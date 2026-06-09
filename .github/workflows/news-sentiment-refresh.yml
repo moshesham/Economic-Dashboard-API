@@ -30,21 +30,22 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        persist-credentials: true
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
-        cache: 'pip'
+    - name: Checkout repository (policy-compliant)
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        git init .
+        git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+        git fetch --depth 1 origin "${GITHUB_SHA}"
+        git checkout -qf FETCH_HEAD
+
+    - name: Prepare Python runtime (policy-compliant)
+      run: |
+        python3 --version
+        python3 -m pip install --upgrade pip
     
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
         pip install -r requirements.txt
     
     - name: Create directories
@@ -151,16 +152,10 @@ jobs:
         echo "::error::Failed to push after $MAX_RETRIES attempts"
         exit 1
     
-    - name: Upload sentiment data as artifact
+    - name: Artifact note
       if: steps.validate_key.outputs.key_available == 'true'
-      uses: actions/upload-artifact@v4
-      with:
-        name: sentiment-data-${{ github.run_number }}
-        path: |
-          data/sentiment/
-          data/cache/news_*.pkl
-          data/cache/trends_*.pkl
-        retention-days: 30
+      run: |
+        echo "Artifacts upload skipped due owner-only action policy" >> $GITHUB_STEP_SUMMARY
     
     - name: Create summary
       if: always()

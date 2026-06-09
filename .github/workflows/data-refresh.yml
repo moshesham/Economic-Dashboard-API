@@ -35,21 +35,22 @@ jobs:
       DASHBOARD_ENV: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'production' || 'development') }}
     
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        persist-credentials: true
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
-        cache: 'pip'
+    - name: Checkout repository (policy-compliant)
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        git init .
+        git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+        git fetch --depth 1 origin "${GITHUB_SHA}"
+        git checkout -qf FETCH_HEAD
+
+    - name: Prepare Python runtime (policy-compliant)
+      run: |
+        python3 --version
+        python3 -m pip install --upgrade pip
     
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install requests[socks] PySocks  # For proxy support
     
@@ -125,14 +126,9 @@ jobs:
         echo "::error::Failed to push after $MAX_RETRIES attempts"
         exit 1
     
-    - name: Upload cache as artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: economic-data-cache-${{ github.run_number }}
-        path: |
-          data/cache/
-          data/backups/
-        retention-days: 30
+    - name: Artifact note
+      run: |
+        echo "Artifacts upload skipped due owner-only action policy" >> $GITHUB_STEP_SUMMARY
     
     - name: Create summary
       if: always()

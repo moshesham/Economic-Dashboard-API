@@ -19,18 +19,22 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+      - name: Checkout code (policy-compliant)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth 1 origin "${GITHUB_SHA}"
+          git checkout -qf FETCH_HEAD
+
+      - name: Prepare Python runtime (policy-compliant)
+        run: |
+          python3 --version
+          python3 -m pip install --upgrade pip
       
       - name: Install linting tools
         run: |
-          python -m pip install --upgrade pip
           pip install ruff mypy
       
       - name: Run Ruff linter
@@ -74,18 +78,22 @@ jobs:
           --health-retries 5
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+      - name: Checkout code (policy-compliant)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth 1 origin "${GITHUB_SHA}"
+          git checkout -qf FETCH_HEAD
+
+      - name: Prepare Python runtime (policy-compliant)
+        run: |
+          python3 --version
+          python3 -m pip install --upgrade pip
       
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
       
       - name: Create necessary directories
@@ -123,23 +131,13 @@ jobs:
             PY
           fi
       
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+      - name: Report generated test artifacts
         if: always()
-        with:
-          files: ./coverage.xml
-          fail_ci_if_error: false
-        continue-on-error: true
-      
-      - name: Upload test results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results
-          path: |
-            test-results.xml
-            coverage.xml
-            htmlcov/
+        run: |
+          echo "### Local CI Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- test-results.xml" >> $GITHUB_STEP_SUMMARY
+          echo "- coverage.xml" >> $GITHUB_STEP_SUMMARY
+          echo "- htmlcov/" >> $GITHUB_STEP_SUMMARY
 
   # ============================================================================
   # Type Checking Job
@@ -150,18 +148,22 @@ jobs:
     needs: lint
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+      - name: Checkout code (policy-compliant)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth 1 origin "${GITHUB_SHA}"
+          git checkout -qf FETCH_HEAD
+
+      - name: Prepare Python runtime (policy-compliant)
+        run: |
+          python3 --version
+          python3 -m pip install --upgrade pip
       
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install mypy types-requests
       
@@ -176,13 +178,19 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Checkout code (policy-compliant)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth 1 origin "${GITHUB_SHA}"
+          git checkout -qf FETCH_HEAD
+
+      - name: Prepare Python runtime (policy-compliant)
+        run: |
+          python3 --version
+          python3 -m pip install --upgrade pip
       
       - name: Install Bandit
         run: pip install bandit[toml]
@@ -190,9 +198,12 @@ jobs:
       - name: Run Bandit security scan
         run: bandit -r api/ modules/ services/ -f json -o bandit-report.json || true
       
-      - name: Upload security report
-        uses: actions/upload-artifact@v4
+      - name: Security scan summary
         if: always()
-        with:
-          name: security-report
-          path: bandit-report.json
+        run: |
+          echo "### Security Report" >> $GITHUB_STEP_SUMMARY
+          if [ -f bandit-report.json ]; then
+            echo "bandit-report.json generated" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "bandit-report.json missing" >> $GITHUB_STEP_SUMMARY
+          fi

@@ -23,28 +23,41 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      
-      - name: Generate changelog
-        id: changelog
-        uses: orhun/git-cliff-action@v3
-        with:
-          config: cliff.toml
-          args: --latest --strip header
-        continue-on-error: true
-      
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          body: ${{ steps.changelog.outputs.content }}
-          generate_release_notes: true
-          draft: false
-          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+      - name: Checkout code with tags (policy-compliant)
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --tags --prune origin
+          git checkout -qf "${GITHUB_SHA}"
+
+      - name: Generate changelog (policy-compliant)
+        id: changelog
+        run: |
+          CURRENT_TAG="${GITHUB_REF_NAME}"
+          PREV_TAG="$(git tag --sort=-creatordate | grep -v "^${CURRENT_TAG}$" | head -n 1 || true)"
+
+          {
+            echo "## Changes in ${CURRENT_TAG}"
+            echo
+            if [ -n "${PREV_TAG}" ]; then
+              git log --pretty=format:'- %s (%h)' "${PREV_TAG}..${CURRENT_TAG}"
+            else
+              git log --pretty=format:'- %s (%h)' -n 50
+            fi
+          } > RELEASE_NOTES.md
+
+      - name: Create GitHub Release (policy-compliant)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PRERELEASE_FLAG=""
+          if echo "${GITHUB_REF_NAME}" | grep -Eq '(alpha|beta|rc)'; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+          gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file RELEASE_NOTES.md ${PRERELEASE_FLAG} || \
+          gh release edit "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes-file RELEASE_NOTES.md ${PRERELEASE_FLAG}
 
   # ============================================================================
   # Build and Push Release Images
@@ -55,8 +68,14 @@ jobs:
     needs: release
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout code (policy-compliant)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth 1 origin "${GITHUB_SHA}"
+          git checkout -qf FETCH_HEAD
 
       - name: Prepare image name (lowercase for Docker)
         id: image
@@ -64,31 +83,29 @@ jobs:
           IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
       
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx (policy-compliant)
+        run: |
+          docker buildx create --name release-builder --driver docker-container --use || docker buildx use release-builder
+          docker buildx inspect --bootstrap
       
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to Container Registry (policy-compliant)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login "${{ env.REGISTRY }}" -u "${{ github.actor }}" --password-stdin
       
       - name: Extract version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       
-      - name: Build and push API image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ steps.version.outputs.VERSION }}
-            ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
+      - name: Build and push API image (policy-compliant)
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --push \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            --tag "${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ steps.version.outputs.VERSION }}" \
+            --tag "${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:latest" \
+            .
       
       - name: Create release summary
         run: |

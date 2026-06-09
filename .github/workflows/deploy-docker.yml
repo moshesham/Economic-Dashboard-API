@@ -39,8 +39,14 @@ jobs:
       name: ${{ github.event.inputs.environment || 'staging' }}
     
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout code (policy-compliant)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git init .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth 1 origin "${GITHUB_SHA}"
+          git checkout -qf FETCH_HEAD
       
       - name: Set deployment variables
         id: vars
