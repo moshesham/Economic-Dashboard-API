@@ -17,25 +17,202 @@ import pandas as pd
 import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-import json
 import os
 from modules.http_client import BLSClient
 
 logger = logging.getLogger(__name__)
 
-
-# Popular BLS series IDs
-BLS_SERIES = {
-    'LNS14000000': 'Unemployment Rate',
-    'CES0000000001': 'Total Nonfarm Employment',
-    'CUUR0000SA0': 'CPI-U (All Items)',
-    'CUSR0000SA0': 'CPI-W (All Items)',
-    'WPUFD49207': 'PPI (Final Demand)',
-    'CES0500000003': 'Average Hourly Earnings - Private Sector',
-    'LNS12300000': 'Labor Force Participation Rate',
-    'CES0000000007': 'Average Weekly Hours - Private Sector',
+# Expanded BLS series categorized by indicator type
+BLS_SERIES_CATEGORIES = {
+    "Employment & Slack": {
+        'LNS14000000': 'Unemployment Rate (U-3)',
+        'LNS13327709': 'Broad Underemployment Rate (U-6)',
+        'CES0000000001': 'Total Nonfarm Employment',
+        'LNS12300000': 'Labor Force Participation Rate (Aggregate)',
+        'LNS11300060': 'Labor Force Participation Rate (Prime-Age 25-54)',
+    },
+    "Labor Market Churn (JOLTS)": {
+        'JTS000000000000000JOL': 'JOLTS Total Job Openings (SA, Thousands)',
+        'JTS000000000000000QUR': 'JOLTS Quits Rate (SA)',
+    },
+    "Inflation & Prices": {
+        'CUUR0000SA0': 'CPI-U (All Items, NSA)',
+        'CUSR0000SA0L1E': 'Core CPI-U (Less Food & Energy, SA)',
+        'WPUFD49207': 'PPI (Final Demand)',
+    },
+    "Wages & Productivity": {
+        'CES0500000003': 'Average Hourly Earnings - Private Sector',
+        'CES0500000007': 'Average Weekly Hours - Private Sector',
+        'CIS2010000000000I': 'Employment Cost Index (ECI) - Private Industry',
+        'PRS85006093': 'Labor Productivity Index - Nonfarm Business',
+    },
 }
 
+# Flat dictionary for backward compatibility with parser and call sites.
+BLS_SERIES = {
+    series_id: name
+    for _, series_map in BLS_SERIES_CATEGORIES.items()
+    for series_id, name in series_map.items()
+}
+
+
+class BLSDataLoader:
+    """Handles API version routing, payload configuration, and data cleaning for BLS."""
+    
+    def __init__(self, api_key: Optional[str] = None):
+        # Resolve key from parameter or environment, but ignore placeholder values.
+        self.api_key = self._normalize_api_key(api_key or os.getenv('BLS_API_KEY'))
+
+        # Select appropriate endpoint and version
+        self.version = "v2" if self.api_key else "v1"
+        # Base URL already contains /v1 or /v2 in BLSClient.
+        self.base_endpoint = "/timeseries/data/"
+        self.client = BLSClient(api_key=self.api_key)
+
+    @staticmethod
+    def _normalize_api_key(raw_key: Optional[str]) -> Optional[str]:
+        """Normalize optional API key and treat template placeholders as missing."""
+        if not raw_key:
+            return None
+
+        key = str(raw_key).strip()
+        if not key:
+            return None
+
+        placeholders = {
+            'your_bls_api_key_here',
+            'your_api_key_here',
+            'changeme',
+            'change-me',
+        }
+        if key.lower() in placeholders:
+            return None
+
+        return key
+
+    def _parse_date(self, year: str, period: str, exclude_averages: bool = True) -> Optional[datetime]:
+        """
+        Converts BLS period codes to datetime objects.
+        Handles monthly (M01-M13), quarterly (Q01-Q05), semi-annual (S01-S03), and annual (A01).
+        """
+        try:
+            yr = int(year)
+            # Monthly
+            if period.startswith('M'):
+                month_num = int(period[1:])
+                if 1 <= month_num <= 12:
+                    return datetime(yr, month_num, 1)
+                elif month_num == 13 and not exclude_averages:
+                    return datetime(yr, 12, 31)  # Annual Average mapped to end of year
+            # Quarterly
+            elif period.startswith('Q'):
+                q_num = int(period[1:])
+                if 1 <= q_num <= 4:
+                    month = (q_num - 1) * 3 + 1
+                    return datetime(yr, month, 1)
+                elif q_num == 5 and not exclude_averages:
+                    return datetime(yr, 12, 31)  # Annual Average
+            # Semi-Annual
+            elif period.startswith('S'):
+                s_num = int(period[1:])
+                if s_num == 1:
+                    return datetime(yr, 6, 30)
+                elif s_num == 2:
+                    return datetime(yr, 12, 31)
+                elif s_num == 3 and not exclude_averages:
+                    return datetime(yr, 12, 31)  # Annual Average
+            # Annual
+            elif period == 'A01':
+                return datetime(yr, 12, 31)
+        except (ValueError, IndexError):
+            pass
+        return None
+
+    def _parse_value(self, value_str: str) -> Optional[float]:
+        """Safely parses numeric string values, handling empty cells or dashes."""
+        if not value_str or value_str.strip() in ('', '-', '.'):
+            return None
+        try:
+            return float(value_str)
+        except ValueError:
+            logger.warning(f"Unable to parse numeric value: '{value_str}'")
+            return None
+
+    def _format_footnotes(self, footnotes: List[Dict[str, str]]) -> str:
+        """Parses raw footnote arrays into a flat, comma-separated string."""
+        return ",".join([f.get('text') for f in footnotes if isinstance(f, dict) and f.get('text')])
+
+    def fetch_series(
+        self,
+        series_ids: List[str],
+        start_year: int,
+        end_year: int,
+        exclude_averages: bool = True
+    ) -> pd.DataFrame:
+        """Executes the requests and formats the JSON results into a DataFrame."""
+        logger.info(f"Requesting {len(series_ids)} series via BLS {self.version}")
+        
+        payload = {
+            'seriesid': series_ids,
+            'startyear': str(start_year),
+            'endyear': str(end_year),
+        }
+        
+        if self.api_key:
+            payload['registrationkey'] = self.api_key
+
+        try:
+            response = self.client.post(
+                self.base_endpoint,
+                json=payload,
+                headers={'Content-Type': 'application/json'}
+            )
+            data = response.json()
+            
+            if data.get('status') != 'REQUEST_SUCCEEDED':
+                logger.error(f"BLS API error: {data.get('message', 'Unknown error')}")
+                return pd.DataFrame()
+            
+            records = []
+            for series in data.get('Results', {}).get('series', []):
+                series_id = series.get('seriesID', '')
+                series_name = BLS_SERIES.get(series_id, series_id)
+                
+                for item in series.get('data', []):
+                    dt = self._parse_date(item.get('year'), item.get('period'), exclude_averages)
+                    if not dt:
+                        continue
+                    
+                    val = self._parse_value(item.get('value', ''))
+                    if val is None:
+                        continue
+                        
+                    records.append({
+                        'series_id': series_id,
+                        'series_name': series_name,
+                        'year': int(item.get('year', 0)),
+                        'period': item.get('period', ''),
+                        'value': val,
+                        'date': dt,
+                        'footnotes': self._format_footnotes(item.get('footnotes', []))
+                    })
+            
+            df = pd.DataFrame(records)
+            if not df.empty:
+                df['date'] = pd.to_datetime(df['date'])
+                df = df.sort_values(['series_id', 'date']).reset_index(drop=True)
+            
+            logger.info(f"Successfully processed {len(df)} BLS records")
+            return df
+            
+        except Exception as e:
+            logger.error(f"Error communicating with BLS API: {e}")
+            raise
+        finally:
+            self.client.close()
+
+
+# --- Functional Wrappers (Maintained for Backward Compatibility) ---
 
 def fetch_bls_series(
     series_ids: List[str],
@@ -55,97 +232,13 @@ def fetch_bls_series(
     Returns:
         DataFrame with BLS data
     """
-    logger.info(f"Fetching {len(series_ids)} BLS series")
-    
-    # Get API key from environment if not provided
-    if api_key is None:
-        api_key = os.getenv('BLS_API_KEY')
-    
-    client = BLSClient(api_key=api_key)
-    
-    # Set default date range
     if start_year is None:
         start_year = datetime.now().year - 10
     if end_year is None:
         end_year = datetime.now().year
-    
-    try:
-        # BLS API requires POST with JSON body
-        payload = {
-            'seriesid': series_ids,
-            'startyear': str(start_year),
-            'endyear': str(end_year),
-        }
-        
-        # Add API key to payload if available
-        if api_key:
-            payload['registrationkey'] = api_key
-        
-        # BLS API endpoint
-        endpoint = '/timeseries/data/'
-        
-        response = client.post(
-            endpoint,
-            json=payload,
-            headers={'Content-Type': 'application/json'}
-        )
-        
-        data = response.json()
-        
-        if data.get('status') != 'REQUEST_SUCCEEDED':
-            logger.error(f"BLS API error: {data.get('message', 'Unknown error')}")
-            return pd.DataFrame()
-        
-        # Parse series data
-        records = []
-        
-        for series in data.get('Results', {}).get('series', []):
-            series_id = series.get('seriesID', '')
-            series_name = BLS_SERIES.get(series_id, series_id)
-            
-            for item in series.get('data', []):
-                # BLS returns data in reverse chronological order
-                year = int(item.get('year', 0))
-                period = item.get('period', '')
-                value = item.get('value', '')
-                
-                if value and value != '':
-                    # Parse period (M01-M12 for monthly, Q01-Q04 for quarterly, A01 for annual)
-                    if period.startswith('M'):
-                        month = int(period[1:])
-                        date = f"{year}-{month:02d}-01"
-                    elif period.startswith('Q'):
-                        quarter = int(period[1:])
-                        month = (quarter - 1) * 3 + 1
-                        date = f"{year}-{month:02d}-01"
-                    elif period == 'A01':
-                        date = f"{year}-12-31"
-                    else:
-                        continue
-                    
-                    records.append({
-                        'series_id': series_id,
-                        'series_name': series_name,
-                        'year': year,
-                        'period': period,
-                        'value': float(value),
-                        'date': date,
-                    })
-        
-        df = pd.DataFrame(records)
-        
-        if not df.empty:
-            df['date'] = pd.to_datetime(df['date'])
-            df = df.sort_values('date')
-        
-        logger.info(f"Fetched {len(df)} BLS records")
-        return df
-        
-    except Exception as e:
-        logger.error(f"Error fetching BLS data: {e}")
-        raise
-    finally:
-        client.close()
+
+    loader = BLSDataLoader(api_key=api_key)
+    return loader.fetch_series(series_ids, start_year, end_year)
 
 
 def fetch_bls_unemployment() -> pd.DataFrame:
@@ -156,9 +249,8 @@ def fetch_bls_unemployment() -> pd.DataFrame:
         DataFrame with unemployment rate
     """
     logger.info("Fetching BLS unemployment rate")
-    
     return fetch_bls_series(
-        series_ids=['LNS14000000'],  # Unemployment Rate
+        series_ids=['LNS14000000'],
         start_year=datetime.now().year - 10
     )
 
@@ -171,9 +263,8 @@ def fetch_bls_cpi() -> pd.DataFrame:
         DataFrame with CPI data
     """
     logger.info("Fetching BLS CPI data")
-    
     return fetch_bls_series(
-        series_ids=['CUUR0000SA0', 'CUSR0000SA0'],  # CPI-U and CPI-W
+        series_ids=['CUUR0000SA0', 'CUSR0000SA0'],
         start_year=datetime.now().year - 10
     )
 
@@ -186,7 +277,6 @@ def fetch_bls_employment() -> pd.DataFrame:
         DataFrame with employment statistics
     """
     logger.info("Fetching BLS employment data")
-    
     return fetch_bls_series(
         series_ids=[
             'CES0000000001',  # Total Nonfarm Employment
@@ -205,7 +295,6 @@ def fetch_bls_wages() -> pd.DataFrame:
         DataFrame with wage statistics
     """
     logger.info("Fetching BLS wage data")
-    
     return fetch_bls_series(
         series_ids=['CES0500000003'],  # Average Hourly Earnings
         start_year=datetime.now().year - 10
@@ -230,7 +319,6 @@ def refresh_bls_data(
     """
     from modules.database.queries import insert_generic_data
     
-    # Default to popular series
     if series_ids is None:
         series_ids = list(BLS_SERIES.keys())
     

@@ -302,6 +302,52 @@ def get_monitored_tickers(limit: int = 200) -> List[str]:
     return [str(t).upper() for t in result["ticker"].tolist()]
 
 
+def get_bls_data(
+    series_ids: Optional[List[str]] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> pd.DataFrame:
+    """
+    Retrieve BLS data from the bls_data table.
+
+    Args:
+        series_ids: Optional list of BLS series IDs to filter by
+        start_date: Optional start date (YYYY-MM-DD)
+        end_date: Optional end date (YYYY-MM-DD)
+        limit: Optional maximum number of rows to return
+
+    Returns:
+        DataFrame with BLS data rows
+    """
+    db = get_db_connection()
+
+    query = "SELECT * FROM bls_data WHERE 1=1"
+    params: List[Any] = []
+
+    if series_ids:
+        placeholders = ", ".join(["?" for _ in series_ids])
+        query += f" AND series_id IN ({placeholders})"
+        params.extend(series_ids)
+
+    if start_date:
+        query += " AND date >= ?"
+        params.append(start_date)
+    if end_date:
+        query += " AND date <= ?"
+        params.append(end_date)
+
+    query += " ORDER BY series_id, date"
+
+    if limit is not None:
+        query += " LIMIT ?"
+        params.append(limit)
+
+    if params:
+        return db.query(query, tuple(params))
+    return db.query(query)
+
+
 # ============================================================================
 # WRITE QUERIES
 # ============================================================================
