@@ -36,11 +36,51 @@ jobs:
           git fetch --depth 1 origin "${GITHUB_SHA}"
           git checkout -qf FETCH_HEAD
 
-      - name: Validate required deployment secrets
+      - name: Resolve deployment configuration
+        id: deploy_config
+        env:
+          DEPLOY_HOST_SECRET: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_HOST_VAR: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER_SECRET: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_USER_VAR: ${{ vars.DEPLOY_USER }}
+          DEPLOY_SSH_KEY_SECRET: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_PATH_SECRET: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_PATH_VAR: ${{ vars.DEPLOY_PATH }}
+          API_PORT_SECRET: ${{ secrets.API_PORT }}
+          API_PORT_VAR: ${{ vars.API_PORT }}
         run: |
-          [ -n "${{ secrets.DEPLOY_HOST }}" ] || { echo "Missing DEPLOY_HOST"; exit 1; }
-          [ -n "${{ secrets.DEPLOY_USER }}" ] || { echo "Missing DEPLOY_USER"; exit 1; }
-          [ -n "${{ secrets.DEPLOY_SSH_KEY }}" ] || { echo "Missing DEPLOY_SSH_KEY"; exit 1; }
+          set -euo pipefail
+
+          DEPLOY_HOST="${DEPLOY_HOST_SECRET:-${DEPLOY_HOST_VAR:-}}"
+          DEPLOY_USER="${DEPLOY_USER_SECRET:-${DEPLOY_USER_VAR:-}}"
+          DEPLOY_SSH_KEY="${DEPLOY_SSH_KEY_SECRET:-}"
+          DEPLOY_PATH="${DEPLOY_PATH_SECRET:-${DEPLOY_PATH_VAR:-/opt/economic-dashboard}}"
+          API_PORT="${API_PORT_SECRET:-${API_PORT_VAR:-8000}}"
+
+          missing=()
+          [ -n "${DEPLOY_HOST}" ] || missing+=("DEPLOY_HOST (secret or variable)")
+          [ -n "${DEPLOY_USER}" ] || missing+=("DEPLOY_USER (secret or variable)")
+          [ -n "${DEPLOY_SSH_KEY}" ] || missing+=("DEPLOY_SSH_KEY (secret)")
+
+          if [ ${#missing[@]} -gt 0 ]; then
+            printf 'Missing required deployment configuration:\n' >> "$GITHUB_STEP_SUMMARY"
+            for item in "${missing[@]}"; do
+              printf -- '- %s\n' "$item" >> "$GITHUB_STEP_SUMMARY"
+            done
+            printf 'Configure these in repository or environment settings, then re-run the workflow.\n' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          {
+            echo "ready=true"
+            echo "deploy_host=${DEPLOY_HOST}"
+            echo "deploy_user=${DEPLOY_USER}"
+            echo "deploy_ssh_key<<EOF"
+            echo "${DEPLOY_SSH_KEY}"
+            echo "EOF"
+            echo "deploy_path=${DEPLOY_PATH}"
+            echo "api_port=${API_PORT}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Set deployment variables
         id: vars
@@ -52,11 +92,12 @@ jobs:
           echo "image_tag=latest" >> "$GITHUB_OUTPUT"
 
       - name: Deploy to remote server via SSH
+        if: ${{ steps.deploy_config.outputs.ready == 'true' }}
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH || '/opt/economic-dashboard' }}
+          DEPLOY_HOST: ${{ steps.deploy_config.outputs.deploy_host }}
+          DEPLOY_USER: ${{ steps.deploy_config.outputs.deploy_user }}
+          DEPLOY_SSH_KEY: ${{ steps.deploy_config.outputs.deploy_ssh_key }}
+          DEPLOY_PATH: ${{ steps.deploy_config.outputs.deploy_path }}
           SERVICES: ${{ steps.vars.outputs.services }}
         run: |
           mkdir -p ~/.ssh
@@ -88,9 +129,10 @@ jobs:
           rm -f ~/.ssh/deploy_key deploy.sh
 
       - name: Health check
+        if: ${{ steps.deploy_config.outputs.ready == 'true' }}
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          API_PORT: ${{ secrets.API_PORT || '8000' }}
+          DEPLOY_HOST: ${{ steps.deploy_config.outputs.deploy_host }}
+          API_PORT: ${{ steps.deploy_config.outputs.api_port }}
         run: |
           for i in {1..30}; do
             if curl -fsS "http://${DEPLOY_HOST}:${API_PORT}/health" >/dev/null; then
@@ -109,4 +151,6 @@ jobs:
           echo "- Environment: ${{ steps.vars.outputs.environment }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Services: ${{ steps.vars.outputs.services }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Image: ghcr.io/${{ steps.vars.outputs.image_name }}:${{ steps.vars.outputs.image_tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Deploy Host: ${{ steps.deploy_config.outputs.deploy_host || 'not configured' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Deploy Path: ${{ steps.deploy_config.outputs.deploy_path || 'not configured' }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Status: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
