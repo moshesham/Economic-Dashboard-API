@@ -90,7 +90,7 @@ class TestCacheMiddleware:
         mock_cache_manager.get.return_value = cached_response
         
         client = TestClient(app)
-        response = client.get("/v1/data/test")
+        response = client.get("/v1/data/test", headers={"X-API-Key": "test-api-key"})
         
         assert response.status_code == 200
         assert response.headers.get("X-Cache") == "HIT"
@@ -111,7 +111,7 @@ class TestCacheMiddleware:
         mock_cache_manager.set.return_value = True
         
         client = TestClient(app)
-        response = client.get("/v1/data/test")
+        response = client.get("/v1/data/test", headers={"X-API-Key": "test-api-key"})
         
         assert response.status_code == 200
         assert response.headers.get("X-Cache") == "MISS"
@@ -154,7 +154,7 @@ class TestCacheMiddleware:
         client = TestClient(app)
         
         # Cached path
-        response1 = client.get("/v1/data/test")
+        response1 = client.get("/v1/data/test", headers={"X-API-Key": "test-api-key"})
         assert response1.status_code == 200
         
         # Reset mock
