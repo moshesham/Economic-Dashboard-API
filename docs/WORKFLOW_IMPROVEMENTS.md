@@ -1,6 +1,8 @@
-# GitHub Actions Workflow Improvements
+# GitHub Actions Workflow Improvements (Historical)
 
 ## Summary of Changes
+
+Note: This document contains historical workflow work. Several workflows referenced below were intentionally removed during repository slimming.
 
 All GitHub Actions workflows have been reviewed and updated to address validation errors and improve robustness.
 
@@ -17,15 +19,8 @@ All GitHub Actions workflows have been reviewed and updated to address validatio
 - Workflow gracefully skips sentiment analysis if API key is missing
 - Clear warning messages guide users to configure required secrets
 
-#### `deploy-to-airflow.yml`
-- Added credential validation for SSH, Astronomer, and GCP deployments
-- Each deployment method checks for required secrets before attempting connection
-- Workflows skip unavailable deployment targets instead of failing
-
-#### `trigger-airflow-dag.yml`
-- Added validation for `AIRFLOW_URL`, `AIRFLOW_USERNAME`, and `AIRFLOW_PASSWORD`
-- DAG trigger and monitoring steps only run when credentials are available
-- Provides helpful messages when secrets are missing
+#### Airflow workflows
+- Airflow-specific workflows were later removed from this repository as non-critical.
 
 ### 2. Schedule Event Conditionals
 
@@ -38,12 +33,10 @@ All GitHub Actions workflows have been reviewed and updated to address validatio
 
 ### 3. Environment Configuration
 
-**Problem**: `ci-cd.yml` referenced undefined `development` and `production` environments
+**Problem**: Legacy environment-specific CI workflow complexity.
 
 **Solution**:
-- Commented out environment references with instructions to create them in repository settings
-- Workflows will run without environment protection until configured
-- Added clear comments on how to enable environment protection
+- Consolidated onto core workflows and removed non-critical pipeline variants.
 
 ### 4. Docker Image Naming (Critical)
 
@@ -121,17 +114,14 @@ done
 
 | Workflow | Status | Notes |
 |----------|--------|-------|
-| `news-sentiment-refresh.yml` | ✅ Fixed | Validates NEWS_API_KEY before use |
-| `deploy-to-airflow.yml` | ✅ Fixed | Validates all deployment credentials |
-| `trigger-airflow-dag.yml` | ✅ Fixed | Validates Airflow credentials |
-| `database-optimization.yml` | ✅ Fixed | Corrected schedule conditionals |
-| `ci-cd.yml` | ✅ Fixed | Commented out undefined environments |
-| `docker.yml` | ✅ Fixed | Lowercase image names for Docker registry |
-| `data-refresh.yml` | ✅ OK | No issues found |
-| `ci.yml` | ✅ OK | No issues found |
-| `docker.yml` | ✅ OK | No issues found |
-| `security.yml` | ✅ OK | No issues found |
-| `deps.yml` | ✅ OK | No issues found |
+| `ci.yml` | ✅ Active | Primary CI checks |
+| `security.yml` | ✅ Active | Security scanning |
+| `docker.yml` | ✅ Active | Image build/publish |
+| `release.yml` | ✅ Active | Tagged release pipeline |
+| `deploy-docker.yml` | ✅ Active | Deployment workflow |
+| `data-refresh.yml` | ✅ Active | Scheduled refresh |
+| `news-sentiment-refresh.yml` | ✅ Active | Optional secret-gated sentiment refresh |
+| `database-optimization.yml` | ✅ Active | Snapshot/cleanup automation |
 
 ## Required Repository Secrets
 

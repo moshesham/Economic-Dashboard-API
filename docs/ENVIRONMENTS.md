@@ -87,27 +87,21 @@ For urgent fixes to production:
 
 ## GitHub Actions Workflows
 
-### CI/CD Pipeline (`ci-cd.yml`)
-- Runs on pushes and PRs to both `main` and `dev`
-- Executes tests and code quality checks
-- Deploys based on branch:
-  - `dev` → Development environment
-  - `main` → Production environment
+### CI Pipeline (`ci.yml`)
+- Runs on pushes and PRs
+- Executes linting, tests, type checks, and security checks
 
-### Promote Dev to Production (`promote-dev-to-prod.yml`)
-- Manual workflow to promote dev changes to production
-- Requires confirmation ("PROMOTE")
-- Runs full test suite before creating PR
-- Creates PR for final review
+### Docker Build (`docker.yml`)
+- Builds and publishes container images
+- Produces API and worker image artifacts
 
-### Sync Main to Dev (`sync-main-to-dev.yml`)
-- Runs automatically when main is updated
-- Creates PR to sync hotfixes back to dev
-- Keeps dev in sync with production
+### Release (`release.yml`)
+- Runs on version tags
+- Creates GitHub releases and release images
 
 ### Data Refresh (`data-refresh.yml`)
 - Supports environment selection via workflow dispatch
-- Auto-detects environment based on branch
+- Runs scheduled and manual refresh
 
 ## Configuration Files
 
@@ -116,8 +110,7 @@ For urgent fixes to production:
 - `.streamlit/environments/config.prod.toml` - Production config
 
 ### Environment Module
-- `environments/config.py` - Python environment configuration
-- `environments/__init__.py` - Module exports
+- Environment is configured through runtime env vars and Streamlit profile files
 
 ## Local Development
 

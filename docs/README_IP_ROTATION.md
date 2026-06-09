@@ -41,36 +41,17 @@ The workflow is already configured to use the proxy automatically. Just trigger 
 
 If you want to spread data fetching over time instead of using a proxy:
 
-### Step 1: Activate Template Workflows
+### Step 1: Use the Active Refresh Workflow
 
-Rename the template files to activate them:
+Use the existing `.github/workflows/data-refresh.yml` workflow with proxy support.
 
-```bash
-# In your repository root
-mv .github/workflows/data-refresh-fred.yml.template .github/workflows/data-refresh-fred.yml
-mv .github/workflows/data-refresh-stocks.yml.template .github/workflows/data-refresh-stocks.yml
-mv .github/workflows/data-refresh-sectors.yml.template .github/workflows/data-refresh-sectors.yml
-```
+### Step 2: Configure Secret
 
-### Step 2: Update Main Workflow
+Add `PROXY_URL` to repository secrets if you need proxy routing.
 
-Either:
-- **Option A:** Delete `.github/workflows/data-refresh.yml` (use only split workflows)
-- **Option B:** Keep it for manual runs, disable the schedule
+### Step 3: Optional Script Enhancements
 
-To disable schedule in main workflow:
-```yaml
-on:
-  # schedule:  # Commented out - using split workflows instead
-  #   - cron: '0 6 * * *'
-  
-  # Keep manual trigger
-  workflow_dispatch:
-```
-
-### Step 3: Update Scripts (Optional)
-
-The template workflows pass `--source` flag to the refresh script. You'll need to update `scripts/refresh_data.py` to support this:
+If you later re-introduce split-source workflows, update `scripts/refresh_data.py` to support a `--source` flag:
 
 ```python
 import argparse

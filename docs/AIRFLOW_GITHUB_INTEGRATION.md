@@ -83,11 +83,8 @@ This guide explains how to deploy and trigger Apache Airflow DAGs using GitHub A
    - `AIRFLOW_PASSWORD`: Your Airflow password
 
 5. **Trigger from GitHub**:
-   The workflow `.github/workflows/trigger-airflow-dag.yml` will:
-   - Run daily at 6 AM UTC
-   - Call Airflow REST API to trigger DAG
-   - Monitor execution status
-   - Report results
+   Airflow-specific GitHub trigger workflows have been removed from this repository.
+   Use Airflow native schedules or trigger DAGs via Airflow UI/API directly.
 
 ---
 
@@ -123,8 +120,8 @@ This guide explains how to deploy and trigger Apache Airflow DAGs using GitHub A
    ```
 
 5. **GitHub Integration**:
-   - Add `ASTRONOMER_API_KEY` to GitHub Secrets
-   - The workflow `.github/workflows/deploy-to-airflow.yml` handles deployment
+   - Add `ASTRONOMER_API_KEY` to your automation platform if needed
+   - This repository no longer includes a dedicated Astronomer deployment workflow
 
 ---
 
@@ -183,27 +180,9 @@ This guide explains how to deploy and trigger Apache Airflow DAGs using GitHub A
 
 ---
 
-## Workflows Created
+## Active Workflow
 
-### 1. `trigger-airflow-dag.yml`
-Triggers an Airflow DAG via REST API:
-```bash
-# Manual trigger from GitHub UI:
-# Actions → Trigger Airflow DAG → Run workflow
-
-# Automatic: Runs daily at 6 AM UTC
-```
-
-### 2. `deploy-to-airflow.yml`
-Deploys DAG files to Airflow server:
-```bash
-# Triggers when you push to airflow/dags/
-git add airflow/dags/economic_data_refresh_dag.py
-git commit -m "Update DAG"
-git push
-```
-
-### 3. `data-refresh.yml` (Already exists)
+### `data-refresh.yml` (Already exists)
 Pure GitHub Actions solution - no Airflow needed!
 
 ---

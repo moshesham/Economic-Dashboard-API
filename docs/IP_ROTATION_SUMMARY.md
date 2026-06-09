@@ -44,13 +44,9 @@ Added proxy libraries:
 pip install requests[socks] PySocks
 ```
 
-### 4. Template Workflows (Time-Spacing Alternative)
-**Files Created:**
-- `.github/workflows/data-refresh-fred.yml.template` - FRED data at 6:00 AM
-- `.github/workflows/data-refresh-stocks.yml.template` - Stocks at 6:30 AM  
-- `.github/workflows/data-refresh-sectors.yml.template` - Sectors at 7:00 AM
-
-**Purpose:** Free alternative to proxies - spreads requests over 1 hour
+### 4. Time-Spacing Alternative
+Split-source template workflows were removed during workflow consolidation.
+Use the active `data-refresh.yml` workflow, or reintroduce split workflows only if needed.
 
 ### 5. Documentation
 **Files Created:**
@@ -69,9 +65,9 @@ pip install requests[socks] PySocks
 **Use when:** Consistently hitting rate limits
 
 ### Option B: Time-Spacing (Free)
-1. Rename `.yml.template` files to `.yml`
-2. Update `scripts/refresh_data.py` to support `--source` flag
-3. Done! Data fetches spread over 1 hour
+1. Keep current single refresh workflow
+2. If rate limits become frequent, implement source-splitting in a new workflow set
+3. Update `scripts/refresh_data.py` to support `--source` when doing so
 
 **Use when:** Occasional rate limits, want free solution
 
@@ -135,7 +131,7 @@ Your existing rate limit protection:
 |-----------|--------|-------|
 | Proxy code support | ✅ Done | Automatic when PROXY_URL set |
 | Proxy workflow config | ✅ Done | Ready for secret |
-| Time-spacing templates | ✅ Done | Rename to activate |
+| Time-spacing templates | ❌ Removed | Reintroduce only if needed |
 | Documentation | ✅ Done | See docs/ and .github/workflows/ |
 | Testing needed | ⏳ Pending | Monitor next workflow run |
 
@@ -151,13 +147,7 @@ Your existing rate limit protection:
 ### If Rate Limited (Choose One):
 
 **Quick Fix (Free):**
-```bash
-# Activate time-spacing workflows
-cd .github/workflows
-mv data-refresh-fred.yml.template data-refresh-fred.yml
-mv data-refresh-stocks.yml.template data-refresh-stocks.yml
-mv data-refresh-sectors.yml.template data-refresh-sectors.yml
-```
+Implement source-splitting in a dedicated workflow if rate limits persist.
 
 **Robust Fix (Paid):**
 1. Sign up at https://www.webshare.io/ ($2.99/month)
