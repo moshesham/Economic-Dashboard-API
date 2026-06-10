@@ -1,0 +1,23 @@
+{
+  "datasets": [
+    "advm3",
+    "bfs",
+    "ftd",
+    "hv",
+    "m3",
+    "marts",
+    "mhs",
+    "mhs2",
+    "mrts",
+    "mtis",
+    "mwts",
+    "qfr",
+    "qpr",
+    "qss",
+    "qtax",
+    "resconst",
+    "ressales",
+    "vip"
+  ],
+  "inserted_total": 57917
+}

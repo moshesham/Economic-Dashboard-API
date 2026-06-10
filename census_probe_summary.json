@@ -1,0 +1,110 @@
+[
+  {
+    "dataset": "advm3",
+    "loadable_now": true,
+    "sample_rows": 5120,
+    "note": "ok"
+  },
+  {
+    "dataset": "bfs",
+    "loadable_now": true,
+    "sample_rows": 5712,
+    "note": "ok"
+  },
+  {
+    "dataset": "ftd",
+    "loadable_now": true,
+    "sample_rows": 96,
+    "note": "ok"
+  },
+  {
+    "dataset": "hv",
+    "loadable_now": true,
+    "sample_rows": 445,
+    "note": "ok"
+  },
+  {
+    "dataset": "m3",
+    "loadable_now": true,
+    "sample_rows": 23200,
+    "note": "ok"
+  },
+  {
+    "dataset": "marts",
+    "loadable_now": true,
+    "sample_rows": 2688,
+    "note": "ok"
+  },
+  {
+    "dataset": "mhs",
+    "loadable_now": false,
+    "sample_rows": 0,
+    "note": "status=400 error: unknown predicate variable: 'NAICS2017'"
+  },
+  {
+    "dataset": "mhs2",
+    "loadable_now": true,
+    "sample_rows": 214,
+    "note": "ok"
+  },
+  {
+    "dataset": "mrts",
+    "loadable_now": true,
+    "sample_rows": 8325,
+    "note": "ok"
+  },
+  {
+    "dataset": "mtis",
+    "loadable_now": true,
+    "sample_rows": 960,
+    "note": "ok"
+  },
+  {
+    "dataset": "mwts",
+    "loadable_now": true,
+    "sample_rows": 7040,
+    "note": "ok"
+  },
+  {
+    "dataset": "qfr",
+    "loadable_now": true,
+    "sample_rows": 23920,
+    "note": "ok"
+  },
+  {
+    "dataset": "qpr",
+    "loadable_now": true,
+    "sample_rows": 112,
+    "note": "ok"
+  },
+  {
+    "dataset": "qss",
+    "loadable_now": true,
+    "sample_rows": 8828,
+    "note": "ok"
+  },
+  {
+    "dataset": "qtax",
+    "loadable_now": false,
+    "sample_rows": 0,
+    "note": "status=400 error: unknown variable 'cell_value'"
+  },
+  {
+    "dataset": "resconst",
+    "loadable_now": true,
+    "sample_rows": 2816,
+    "note": "ok"
+  },
+  {
+    "dataset": "ressales",
+    "loadable_now": true,
+    "sample_rows": 928,
+    "note": "ok"
+  },
+  {
+    "dataset": "vip",
+    "loadable_now": true,
+    "sample_rows": 4608,
+    "note": "ok"
+  }
+]
