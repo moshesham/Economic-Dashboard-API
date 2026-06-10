@@ -28,7 +28,11 @@ CENSUS_EITS_DATASETS = {
     'hv': {'endpoint': '/timeseries/eits/hv', 'indicator': 'HOUSING_VACANCIES_HOMEOWNERSHIP'},
     'm3': {'endpoint': '/timeseries/eits/m3', 'indicator': 'MFG_SHIP_INV_ORDERS'},
     'marts': {'endpoint': '/timeseries/eits/marts', 'indicator': 'RETAIL_SALES_ADVANCE'},
-    'mhs': {'endpoint': '/timeseries/eits/mhs', 'indicator': 'MANUFACTURED_HOMES_SURVEY'},
+    'mhs': {
+        'endpoint': '/timeseries/eits/mhs',
+        'indicator': 'MANUFACTURED_HOMES_SURVEY',
+        'start_year': 1980,
+    },
     'mhs2': {'endpoint': '/timeseries/eits/mhs2', 'indicator': 'MANUFACTURED_HOUSING_2014P'},
     'mrts': {'endpoint': '/timeseries/eits/mrts', 'indicator': 'MONTHLY_RETAIL_TRADE'},
     'mtis': {'endpoint': '/timeseries/eits/mtis', 'indicator': 'MFG_TRADE_INV_SALES'},
@@ -37,7 +41,12 @@ CENSUS_EITS_DATASETS = {
     'qpr': {'endpoint': '/timeseries/eits/qpr', 'indicator': 'PUBLIC_PENSIONS_QTR'},
     'qss': {'endpoint': '/timeseries/eits/qss', 'indicator': 'QUARTERLY_SERVICES_SURVEY'},
     # qtax uses amount as the value field (no cell_value variable).
-    'qtax': {'endpoint': '/timeseries/eits/qtax', 'indicator': 'STATE_LOCAL_TAX_QTR', 'value_field': 'amount'},
+    'qtax': {
+        'endpoint': '/timeseries/eits/qtax',
+        'indicator': 'STATE_LOCAL_TAX_QTR',
+        'value_field': 'CELL_VALUE',
+        'get_fields': 'CELL_VALUE,DATA_TYPE_CODE,TIME_SLOT_ID,CATEGORY_CODE,SEASONALLY_ADJ',
+    },
     'resconst': {'endpoint': '/timeseries/eits/resconst', 'indicator': 'NEW_RESIDENTIAL_CONSTRUCTION'},
     'ressales': {'endpoint': '/timeseries/eits/ressales', 'indicator': 'NEW_HOME_SALES'},
     'vip': {'endpoint': '/timeseries/eits/vip', 'indicator': 'CONSTRUCTION_SPENDING'},
@@ -141,9 +150,29 @@ class CensusBureauDataLoader:
         return None
 
     @staticmethod
+    def _row_get(row: pd.Series, *keys: str, default: Any = None) -> Any:
+        """Case-insensitive row accessor for heterogeneous Census endpoints."""
+        for key in keys:
+            if key in row:
+                return row.get(key)
+
+        lowered = {str(col).lower(): col for col in row.index}
+        for key in keys:
+            col = lowered.get(str(key).lower())
+            if col is not None:
+                return row.get(col)
+
+        return default
+
+    @staticmethod
     def _build_category(row: Dict[str, Any]) -> str:
         """Create a stable category that also captures geography when present."""
-        base_category = str(row.get('category_code', '') or row.get('data_type_code', '')).strip()
+        base_category = str(
+            row.get('category_code', '')
+            or row.get('CATEGORY_CODE', '')
+            or row.get('data_type_code', '')
+            or row.get('DATA_TYPE_CODE', '')
+        ).strip()
         geo_parts: List[str] = []
         seasonality_raw = str(row.get('seasonally_adj', '') or '').strip().lower()
 
@@ -205,13 +234,14 @@ class CensusBureauDataLoader:
         self,
         endpoint: str,
         start_year: int,
-        value_field: str = 'cell_value'
+        value_field: str = 'cell_value',
+        get_fields: Optional[str] = None,
     ) -> pd.DataFrame:
         """
         Generic helper to fetch data from the Economic Indicator Time Series (EITS).
         """
-        get_fields = f"{value_field},data_type_code,time_slot_id,category_code,seasonally_adj"
-        response = self._request_eits(endpoint, start_year, get_fields=get_fields)
+        requested_fields = get_fields or f"{value_field},data_type_code,time_slot_id,category_code,seasonally_adj"
+        response = self._request_eits(endpoint, start_year, get_fields=requested_fields)
 
         if not response or len(response) < 2:
             logger.warning(f"No EITS data returned from endpoint: {endpoint}")
@@ -225,16 +255,18 @@ class CensusBureauDataLoader:
         for _, row in df.iterrows():
             try:
                 # Filter out suppressed values (e.g., (D), (S), (NA)) gracefully
-                val_str = str(row.get(value_field, '0')).strip()
+                val_raw = self._row_get(row, value_field, default='0')
+                val_str = str(val_raw).strip()
                 value = float(val_str)
                 
-                category = self._build_category(row)
-                seasonally_adj = row.get('seasonally_adj', '')
+                row_dict = row.to_dict()
+                category = self._build_category(row_dict)
+                seasonally_adj = self._row_get(row, 'seasonally_adj', 'SEASONALLY_ADJ', default='')
 
                 # Extract and parse the standard date from 'time' or fallback to 'time_slot_id'
                 date_str = self._parse_time_to_date(
-                    raw_time=row.get('time') or row.get('time_period'),
-                    raw_slot=row.get('time_slot_id')
+                    raw_time=self._row_get(row, 'time', 'time_period', 'TIME', default=None),
+                    raw_slot=self._row_get(row, 'time_slot_id', 'TIME_SLOT_ID')
                 )
 
                 if date_str:
@@ -261,10 +293,13 @@ class CensusBureauDataLoader:
             raise ValueError(f"Unsupported Census EITS dataset: {dataset_key}")
 
         meta = CENSUS_EITS_DATASETS[ds_key]
+        effective_start_year = min(start_year, int(meta.get('start_year', start_year)))
+
         df = self.fetch_eits_data(
             meta['endpoint'],
-            start_year,
-            value_field=meta.get('value_field', 'cell_value')
+            effective_start_year,
+            value_field=meta.get('value_field', 'cell_value'),
+            get_fields=meta.get('get_fields')
         )
         if not df.empty:
             df['indicator'] = meta['indicator']
