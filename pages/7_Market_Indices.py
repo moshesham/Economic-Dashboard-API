@@ -356,7 +356,7 @@ with tab_performance:
                 color = 'green' if val > 0 else 'red' if val < 0 else 'gray'
                 return f'color: {color}'
             
-            styled_df = perf_df.style.applymap(color_returns).format("{:.2f}%", na_rep="N/A")
+            styled_df = perf_df.style.map(color_returns).format("{:.2f}%", na_rep="N/A")
             st.dataframe(styled_df, use_container_width=True)
             
             # Bar chart comparison
