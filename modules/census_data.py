@@ -36,7 +36,8 @@ CENSUS_EITS_DATASETS = {
     'qfr': {'endpoint': '/timeseries/eits/qfr', 'indicator': 'QUARTERLY_FINANCIAL_REPORT'},
     'qpr': {'endpoint': '/timeseries/eits/qpr', 'indicator': 'PUBLIC_PENSIONS_QTR'},
     'qss': {'endpoint': '/timeseries/eits/qss', 'indicator': 'QUARTERLY_SERVICES_SURVEY'},
-    'qtax': {'endpoint': '/timeseries/eits/qtax', 'indicator': 'STATE_LOCAL_TAX_QTR'},
+    # qtax uses amount as the value field (no cell_value variable).
+    'qtax': {'endpoint': '/timeseries/eits/qtax', 'indicator': 'STATE_LOCAL_TAX_QTR', 'value_field': 'amount'},
     'resconst': {'endpoint': '/timeseries/eits/resconst', 'indicator': 'NEW_RESIDENTIAL_CONSTRUCTION'},
     'ressales': {'endpoint': '/timeseries/eits/ressales', 'indicator': 'NEW_HOME_SALES'},
     'vip': {'endpoint': '/timeseries/eits/vip', 'indicator': 'CONSTRUCTION_SPENDING'},
@@ -162,16 +163,18 @@ class CensusBureauDataLoader:
 
         return base_category
 
-    def _request_eits(self, endpoint: str, start_year: int) -> List[List[Any]]:
+    def _request_eits(self, endpoint: str, start_year: int, get_fields: str) -> List[List[Any]]:
         """Request EITS data with fallback geography parameters for strict endpoints."""
         base_params = {
-            'get': 'cell_value,data_type_code,time_slot_id,category_code,seasonally_adj',
+            'get': get_fields,
             'time': f'from {start_year}',
         }
         attempts = [
             base_params,
             {**base_params, 'for': 'us:*'},
             {**base_params, 'for': 'us:1'},
+            {**base_params, 'for': 'region:*'},
+            {**base_params, 'for': 'state:*'},
             {**base_params, 'for': 'us:*', 'NAICS2017': '*'},
             {**base_params, 'for': 'us:1', 'NAICS2017': '*'},
         ]
@@ -198,11 +201,17 @@ class CensusBureauDataLoader:
         except Exception as e:
             logger.debug(f"Error closing Census client: {e}")
 
-    def fetch_eits_data(self, endpoint: str, start_year: int) -> pd.DataFrame:
+    def fetch_eits_data(
+        self,
+        endpoint: str,
+        start_year: int,
+        value_field: str = 'cell_value'
+    ) -> pd.DataFrame:
         """
         Generic helper to fetch data from the Economic Indicator Time Series (EITS).
         """
-        response = self._request_eits(endpoint, start_year)
+        get_fields = f"{value_field},data_type_code,time_slot_id,category_code,seasonally_adj"
+        response = self._request_eits(endpoint, start_year, get_fields=get_fields)
 
         if not response or len(response) < 2:
             logger.warning(f"No EITS data returned from endpoint: {endpoint}")
@@ -216,7 +225,7 @@ class CensusBureauDataLoader:
         for _, row in df.iterrows():
             try:
                 # Filter out suppressed values (e.g., (D), (S), (NA)) gracefully
-                val_str = str(row.get('cell_value', '0')).strip()
+                val_str = str(row.get(value_field, '0')).strip()
                 value = float(val_str)
                 
                 category = self._build_category(row)
@@ -252,7 +261,11 @@ class CensusBureauDataLoader:
             raise ValueError(f"Unsupported Census EITS dataset: {dataset_key}")
 
         meta = CENSUS_EITS_DATASETS[ds_key]
-        df = self.fetch_eits_data(meta['endpoint'], start_year)
+        df = self.fetch_eits_data(
+            meta['endpoint'],
+            start_year,
+            value_field=meta.get('value_field', 'cell_value')
+        )
         if not df.empty:
             df['indicator'] = meta['indicator']
         return df
@@ -401,6 +414,7 @@ def refresh_census_data(
     Refresh Census Bureau data in the database.
     """
     from modules.database.queries import insert_generic_data
+    from modules.database.factory import get_db_connection
     
     total_records = 0
     if start_year is None:
@@ -416,7 +430,14 @@ def refresh_census_data(
                     df = loader.fetch_eits_dataset(ds_key, start_year=start_year)
                     if not df.empty:
                         df = df.drop_duplicates(subset=['date', 'indicator', 'category'], keep='last')
-                        records = insert_generic_data(df, 'census_data')
+                        db = get_db_connection()
+                        db.insert_df(
+                            df,
+                            'census_data',
+                            if_exists='append',
+                            conflict_columns=['date', 'indicator', 'category']
+                        )
+                        records = len(df)
                         total_records += records
                         logger.info(f"Inserted {records} Census records for dataset={ds_key}")
                     else:
