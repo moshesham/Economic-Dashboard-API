@@ -242,23 +242,28 @@ def load_fred_data(series_ids: dict) -> pd.DataFrame:
     if is_offline_mode():
         return _load_offline_fred_data(series_ids)
 
+    requested = dict(series_ids)
+    db_result = pd.DataFrame()
+    remaining = dict(requested)
+
     # Try configured database backend first if available
     if DB_BACKEND_AVAILABLE and 'get_fred_series' in globals():
         try:
-            # Get data from DuckDB
-            series_list = list(series_ids.values())
+            series_list = list(requested.values())
             db_data = get_fred_series(series_list)
             
             if not db_data.empty:
-                # Convert from long format to wide format
                 result = db_data.pivot(index='date', columns='series_id', values='value')
                 result.index = pd.to_datetime(result.index)
                 
-                # Rename columns back to descriptive names
                 reverse_mapping = {v: k for k, v in series_ids.items()}
                 result = result.rename(columns=reverse_mapping)
-                
-                return result
+
+                db_result = result
+                remaining = {k: v for k, v in requested.items() if k not in db_result.columns}
+
+                if not remaining:
+                    return db_result
         except Exception as e:
             err = str(e)
             if "fred_data" in err and "does not exist" in err:
@@ -267,46 +272,108 @@ def load_fred_data(series_ids: dict) -> pd.DataFrame:
             else:
                 st.warning(f"Could not load from database: {e}. Falling back to API.")
 
+    # Map requested series IDs to friendly cached column names when needed.
+    def _extract_cached_subset(cached_df: pd.DataFrame, need: dict) -> pd.DataFrame:
+        if cached_df is None or cached_df.empty or not need:
+            return pd.DataFrame()
+
+        try:
+            from modules.data_series_config import get_all_fred_series
+            friendly_to_id = get_all_fred_series()
+        except Exception:
+            friendly_to_id = {}
+
+        out = pd.DataFrame(index=cached_df.index)
+        for requested_col, series_id in need.items():
+            if requested_col in cached_df.columns:
+                out[requested_col] = cached_df[requested_col]
+                continue
+
+            # Cache may use friendly names (e.g., "Core CPI") while caller uses IDs.
+            friendly_match = next(
+                (friendly for friendly, sid in friendly_to_id.items()
+                 if sid == series_id and friendly in cached_df.columns),
+                None,
+            )
+            if friendly_match is not None:
+                out[requested_col] = cached_df[friendly_match]
+
+        return out
+
     # First, try to load from the centralized cache (updated daily by automation)
     centralized_cache = f"{get_cache_dir()}/fred_all_series.pkl"
+    cache_subset = pd.DataFrame()
     if os.path.exists(centralized_cache):
         try:
-            cached_data = _load_cached_data(centralized_cache)
+            # Centralized cache is a resilience source; allow older snapshots.
+            cached_data = _load_cached_data(centralized_cache, max_age_hours=24 * 365)
+            if cached_data is not None and isinstance(cached_data, dict):
+                cached_data = cached_data.get('data')
             if cached_data is not None and isinstance(cached_data, pd.DataFrame):
-                # Filter to requested series
-                available_series = [name for name in series_ids.keys() if name in cached_data.columns]
-                if available_series:
-                    return cached_data[available_series].copy()
+                cache_subset = _extract_cached_subset(cached_data, remaining)
+                if not cache_subset.empty:
+                    remaining = {k: v for k, v in remaining.items() if k not in cache_subset.columns}
         except Exception as e:
             st.warning(f"Could not load from centralized cache: {e}")
 
     # Fallback: Try to load from individual cache
-    cache_key = str(sorted(series_ids.items()))
+    cache_key = str(sorted(remaining.items()))
     cache_file = f"{get_cache_dir()}/fred_{hash(cache_key)}.pkl"
-    cached_data = _load_cached_data(cache_file)
-    if cached_data is not None and isinstance(cached_data, pd.DataFrame):
-        return cached_data
+    individual_subset = pd.DataFrame()
+    if remaining:
+        cached_data = _load_cached_data(cache_file, max_age_hours=24 * 365)
+        if cached_data is not None and isinstance(cached_data, dict):
+            cached_data = cached_data.get('data')
+        if cached_data is not None and isinstance(cached_data, pd.DataFrame):
+            individual_subset = _extract_cached_subset(cached_data, remaining)
+            if not individual_subset.empty:
+                remaining = {k: v for k, v in remaining.items() if k not in individual_subset.columns}
 
-    # Load from API
+    # Load missing series from API
+    api_subset = pd.DataFrame()
     try:
         data_frames = {}
-        for name, series_id in series_ids.items():
+        fresh_rows = []
+        for name, series_id in remaining.items():
             try:
                 df = _fetch_fred_series(series_id, start='2000-01-01')
-                
+
                 if not df.empty:
-                    data_frames[name] = df.iloc[:, 0]
+                    series = df.iloc[:, 0]
+                    data_frames[name] = series
+                    fresh_rows.append(
+                        pd.DataFrame(
+                            {
+                                'series_id': series_id,
+                                'date': pd.to_datetime(series.index),
+                                'value': pd.to_numeric(series.values, errors='coerce'),
+                            }
+                        )
+                    )
             except Exception as e:
                 st.warning(f"Could not load {name} ({series_id}): {str(e)}")
-                continue
 
         if data_frames:
-            result = pd.DataFrame(data_frames)
-            # Save to cache
-            _save_cached_data(cache_file, result)
-            return result
-        else:
+            api_subset = pd.DataFrame(data_frames)
+            _save_cached_data(cache_file, api_subset)
+
+            if DB_BACKEND_AVAILABLE and 'insert_fred_data' in globals() and fresh_rows:
+                try:
+                    insert_fred_data(pd.concat(fresh_rows, ignore_index=True))
+                except Exception as e:
+                    st.warning(f"Fetched FRED data but could not persist to database: {e}")
+
+        # Merge all partial sources and preserve caller column order.
+        parts = [df for df in [db_result, cache_subset, individual_subset, api_subset] if df is not None and not df.empty]
+        if not parts:
             return pd.DataFrame()
+
+        merged = parts[0]
+        for df_part in parts[1:]:
+            merged = merged.join(df_part, how='outer')
+
+        ordered_cols = [k for k in requested.keys() if k in merged.columns]
+        return merged[ordered_cols].sort_index()
     except Exception as e:
         st.error(f"Error loading FRED data: {str(e)}")
         # Fallback to offline data if available

@@ -420,7 +420,7 @@ class MarginCallRiskCalculator:
         
         try:
             df = pd.DataFrame([risk_data])
-            self.db.execute("INSERT OR REPLACE INTO margin_call_risk SELECT * FROM df")
+            self.db.insert_df(df, 'margin_call_risk', conflict_columns=['ticker', 'date'])
             logger.info(f"Stored margin risk for {risk_data['ticker']}: {risk_data['composite_risk_score']:.1f}")
         except Exception as e:
             logger.error(f"Error storing margin risk: {e}")

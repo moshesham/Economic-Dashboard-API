@@ -292,7 +292,7 @@ class LeverageMetricsCalculator:
             return
         
         try:
-            self.db.execute("INSERT OR REPLACE INTO leverage_metrics SELECT * FROM df")
+            self.db.insert_df(df, 'leverage_metrics', conflict_columns=['ticker', 'date'])
             logger.info(f"Stored leverage metrics: {len(df)} records")
         except Exception as e:
             logger.error(f"Error storing leverage metrics: {e}")
@@ -304,7 +304,7 @@ class LeverageMetricsCalculator:
         
         try:
             df = pd.DataFrame([metrics])
-            self.db.execute("INSERT OR REPLACE INTO vix_term_structure SELECT * FROM df")
+            self.db.insert_df(df, 'vix_term_structure', conflict_columns=['date'])
             logger.info(f"Stored VIX term structure for {metrics['date']}")
         except Exception as e:
             logger.error(f"Error storing VIX term structure: {e}")
@@ -315,7 +315,7 @@ class LeverageMetricsCalculator:
             return
         
         try:
-            self.db.execute("INSERT OR REPLACE INTO leveraged_etf_data SELECT * FROM df")
+            self.db.insert_df(df, 'leveraged_etf_data', conflict_columns=['ticker', 'date'])
             logger.info(f"Stored leveraged ETF data: {len(df)} records")
         except Exception as e:
             logger.error(f"Error storing leveraged ETF data: {e}")

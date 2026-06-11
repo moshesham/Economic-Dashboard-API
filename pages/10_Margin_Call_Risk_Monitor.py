@@ -153,12 +153,13 @@ with tab1:
             st.subheader("VIX Term Structure (30 Days)")
             
             try:
-                vix_history_query = f"""
+                cutoff_date = (datetime.now().date() - timedelta(days=days_back)).isoformat()
+                vix_history_query = """
                     SELECT * FROM vix_term_structure
-                    WHERE date >= DATE('now', '-{days_back} days')
+                    WHERE date >= ?
                     ORDER BY date
                 """
-                vix_history = db.query(vix_history_query)
+                vix_history = db.query(vix_history_query, (cutoff_date,))
             except Exception:
                 vix_history = pd.DataFrame()
             
@@ -492,13 +493,14 @@ with tab3:
     
     if ticker_for_history:
         try:
-            history_query = f"""
+            cutoff_date = (datetime.now().date() - timedelta(days=days_back)).isoformat()
+            history_query = """
                 SELECT * FROM margin_call_risk
                 WHERE ticker = ?
-                AND date >= DATE('now', '-{days_back} days')
+                AND date >= ?
                 ORDER BY date
             """
-            history_data = db.query(history_query, (ticker_for_history.upper(),))
+            history_data = db.query(history_query, (ticker_for_history.upper(), cutoff_date))
         except Exception:
             history_data = pd.DataFrame()
         
@@ -638,7 +640,8 @@ with tab4:
     
     # Query for stocks that crossed thresholds recently
     try:
-        recent_alerts_query = f"""
+        recent_cutoff = (datetime.now().date() - timedelta(days=7)).isoformat()
+        recent_alerts_query = """
             SELECT 
                 ticker,
                 date,
@@ -646,12 +649,12 @@ with tab4:
                 risk_level,
                 vix_regime
             FROM margin_call_risk
-            WHERE composite_risk_score > {critical_threshold}
-            AND date >= DATE('now', '-7 days')
+            WHERE composite_risk_score > ?
+            AND date >= ?
             ORDER BY date DESC, composite_risk_score DESC
             LIMIT 10
         """
-        recent_alerts = db.query(recent_alerts_query)
+        recent_alerts = db.query(recent_alerts_query, (critical_threshold, recent_cutoff))
     except Exception:
         recent_alerts = pd.DataFrame()
     
