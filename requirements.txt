@@ -37,7 +37,7 @@ sqlalchemy>=2.0.0  # ORM and database toolkit
 yfinance>=0.2.28
 pandas-datareader>=0.10.0
 requests>=2.31.0
-sdmx1>=3.0.0
+sdmx1>=2.5.0
 
 
 # ============================================================================
